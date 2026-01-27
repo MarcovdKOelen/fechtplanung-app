@@ -26,11 +26,9 @@ workflows:
           org.gradle.parallel=false
           org.gradle.caching=true
 
-          # Network timeouts (keep, harmless)
           systemProp.org.gradle.internal.http.connectionTimeout=900000
           systemProp.org.gradle.internal.http.socketTimeout=900000
 
-          # Kotlin daemon crashes in CI -> disable daemon usage
           kotlin.compiler.execution.strategy=in-process
           kotlin.daemon.jvmargs=-Xmx1024m
           kotlin.incremental=false
@@ -43,7 +41,7 @@ workflows:
         script: |
           flutter pub get
 
-      - name: Build debug APK (retry)
+      - name: Build debug APK (print REAL flutter error)
         script: |
           set -e
           flutter clean
@@ -51,30 +49,21 @@ workflows:
           cd android
           ./gradlew --stop || true
 
-          ATTEMPTS=3
-          for i in $(seq 1 $ATTEMPTS); do
-            echo "========== BUILD ATTEMPT $i / $ATTEMPTS =========="
-            set +e
-            ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain 2>&1 | tee gradle.log
-            EXIT=${PIPESTATUS[0]}
-            set -e
+          set +e
+          ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain 2>&1 | tee gradle.log
+          EXIT=${PIPESTATUS[0]}
+          set -e
 
-            if [ "$EXIT" -eq 0 ]; then
-              echo "Build succeeded."
-              exit 0
-            fi
-
-            echo "Build failed. Key lines:"
-            grep -n -E "Kotlin compile daemon|daemon has terminated|Could not download|Could not resolve|Read timed out|SocketTimeoutException|FAILURE: Build failed|What went wrong:|Caused by:" gradle.log | tail -n 160 || true
-
-            if [ "$i" -lt "$ATTEMPTS" ]; then
-              echo "Retrying in 20s..."
-              sleep 20
-            else
-              exit $EXIT
-            fi
-          done
+          if [ "$EXIT" -ne 0 ]; then
+            echo "========== FLUTTER ERROR LINES =========="
+            # zeigt die echte Flutter/Dart Fehlermeldung (steht fast immer vorher im Log)
+            grep -n -E "lib/|Error:|Exception:|Target kernel_snapshot_program failed|pubspec.yaml|Could not find|Undefined|Method not found|A problem occurred evaluating|Execution failed for task" gradle.log | tail -n 200 || true
+            echo "========== WHAT WENT WRONG =========="
+            awk '/\* What went wrong:/{p=1} p{print} /\* Try:/{if(p) exit}' gradle.log || true
+            exit "$EXIT"
+          fi
 
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
       - android/gradle.log
+
