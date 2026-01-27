@@ -10,7 +10,8 @@ import '../services/import_service.dart';
 
 class ImportScreen extends StatefulWidget {
   final String uid;
-  const ImportScreen({super.key, required this.uid});
+  final String scopeId; // "self" oder athleteId
+  const ImportScreen({super.key, required this.uid, this.scopeId = "self"});
 
   @override
   State<ImportScreen> createState() => _ImportScreenState();
@@ -320,7 +321,15 @@ class _ImportScreenState extends State<ImportScreen> {
 
     try {
       final fs = FirebaseFirestore.instance;
-      final settingsRef = fs.collection("users").doc(widget.uid).collection("settings").doc("main");
+
+      final settingsRef = fs
+          .collection("users")
+          .doc(widget.uid)
+          .collection("scopes")
+          .doc(widget.scopeId)
+          .collection("settings")
+          .doc("main");
+
       final settings = await settingsRef.get();
 
       DateTime seasonStart = DateTime(DateTime.now().month >= 10 ? DateTime.now().year : DateTime.now().year - 1, 10, 1);
@@ -362,18 +371,20 @@ class _ImportScreenState extends State<ImportScreen> {
         return;
       }
 
-      final col = fs.collection("users").doc(widget.uid).collection("tournaments");
+      final col = fs
+          .collection("users")
+          .doc(widget.uid)
+          .collection("scopes")
+          .doc(widget.scopeId)
+          .collection("tournaments");
 
-      // delete all existing
       final existing = await col.get();
       final batch = fs.batch();
       for (final d in existing.docs) {
         batch.delete(d.reference);
       }
-      // add new
       for (final t in parsed) {
-        final ref = col.doc();
-        batch.set(ref, t);
+        batch.set(col.doc(), t);
       }
       await batch.commit();
 
