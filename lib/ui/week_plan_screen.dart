@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/age_class.dart';
 import '../models/week_plan.dart';
+import '../models/tournament.dart';
 import '../services/firestore_service.dart';
 import '../services/plan_engine.dart';
 import '../services/export_service.dart';
@@ -51,7 +52,10 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
           IconButton(
             icon: const Icon(Icons.upload_file),
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ImportScreen(uid: widget.uid)));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ImportScreen(uid: widget.uid, scopeId: _scopeId)),
+              );
             },
           ),
           IconButton(
@@ -61,7 +65,10 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => SetupScreen(uid: widget.uid, scopeId: _scopeId)));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => SetupScreen(uid: widget.uid, scopeId: _scopeId)),
+              );
             },
           ),
           IconButton(
@@ -89,22 +96,23 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             children: [
               if (role == "trainer") _scopePicker(),
               Expanded(
-                child: StreamBuilder(
+                child: StreamBuilder<Map<String, dynamic>>(
                   stream: _fs.watchSettings(widget.uid, scopeId: _scopeId),
                   builder: (context, settingsSnap) {
-                    final settings = (settingsSnap.data as Map<String, dynamic>?) ?? {};
+                    final settings = settingsSnap.data ?? {};
                     final seasonStartStr = (settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString();
                     final seasonStart = DateTime.parse(seasonStartStr);
 
-                    return StreamBuilder(
+                    return StreamBuilder<List<Tournament>>(
                       stream: _fs.watchTournaments(widget.uid, scopeId: _scopeId),
                       builder: (context, tSnap) {
-                        final tournaments = (tSnap.data as List?)?.cast() ?? const [];
+                        final tournaments = tSnap.data ?? const <Tournament>[];
+
                         final weeks = PlanEngine.buildWeeks(
                           ageClass: _activeAge,
                           seasonStart: seasonStart,
                           numberOfWeeks: 52,
-                          tournaments: tournaments.cast(),
+                          tournaments: tournaments,
                           settings: settings,
                         );
 
@@ -155,7 +163,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
               DropdownButton<String>(
                 value: _scopeId,
                 items: items,
-                onChanged: (v) async {
+                onChanged: (v) {
                   if (v == null) return;
                   setState(() {
                     _scopeId = v;
@@ -173,30 +181,25 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
   }
 
   Future<void> _export(BuildContext context) async {
-    final settings = await _fs.settingsRef(widget.uid, scopeId: _scopeId).get();
-    final s = settings.data() ?? {};
-    final seasonStart = DateTime.parse((s["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
+    final settingsDoc = await _fs.settingsRef(widget.uid, scopeId: _scopeId).get();
+    final settings = settingsDoc.data() ?? {};
+    final seasonStart = DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
 
     final tournamentsQ = await _fs.tournamentsRef(widget.uid, scopeId: _scopeId).get();
-    final tournaments = tournamentsQ.docs.map((d) => d).toList();
-
-    final t = tournaments.map((d) {
-      final data = d.data();
-      return Tournament.fromDoc(d.id, data);
-    }).toList();
+    final tournaments = tournamentsQ.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList();
 
     final weeks = PlanEngine.buildWeeks(
       ageClass: _activeAge,
       seasonStart: seasonStart,
       numberOfWeeks: 52,
-      tournaments: t,
-      settings: s,
+      tournaments: tournaments,
+      settings: settings,
     );
 
     ExportSheet.show(
       context,
       onXlsx: () async {
-        final bytes = ExportService.toXlsx(tournaments: t, weeks: weeks);
+        final bytes = ExportService.toXlsx(tournaments: tournaments, weeks: weeks);
         await ShareFile.shareBytes(
           bytes: bytes,
           fileName: "Fechtplanung_${_scopeLabel}_${ageClassLabel(_activeAge)}.xlsx",
@@ -204,7 +207,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
         );
       },
       onTournamentsCsv: () async {
-        final bytes = ExportService.tournamentsCsv(t);
+        final bytes = ExportService.tournamentsCsv(tournaments);
         await ShareFile.shareBytes(
           bytes: bytes,
           fileName: "Turniere_${_scopeLabel}.csv",
