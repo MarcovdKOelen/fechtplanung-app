@@ -16,8 +16,14 @@ class App extends StatelessWidget {
       title: 'Trainingsplanung Fechten MvK',
       theme: ThemeData(useMaterial3: true),
       home: const Scaffold(
-        body: Center(child: Text('Trainingsplanung Fechten MvK')),
+        body: Center(
+          child: Text(
+            'Trainingsplanung Fechten MvK',
+            textAlign: TextAlign.center,
+          ),
+        ),
       ),
     );
   }
 }
+
