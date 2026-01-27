@@ -9,10 +9,6 @@ workflows:
         script: |
           flutter doctor -v
 
-      - name: Create missing platform files
-        script: |
-          flutter create .
-
       - name: Get dependencies
         script: |
           flutter pub get
