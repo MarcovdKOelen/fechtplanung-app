@@ -6,23 +6,25 @@ import 'firebase_options.dart';
 import 'ui/login_screen.dart';
 import 'ui/week_plan_screen.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const App());
+  runApp(const MyApp());
 }
 
-class App extends StatelessWidget {
-  const App({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Trainingsplanung Fechten MvK',
-      theme: ThemeData(useMaterial3: true),
+      theme: ThemeData(
+        useMaterial3: true,
+      ),
       home: const AuthGate(),
     );
   }
@@ -35,18 +37,21 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snap) {
-        final user = snap.data;
-
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      builder: (context, snapshot) {
+        // Ladezustand
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
-        if (user == null) {
+        // Nicht eingeloggt → Login
+        if (!snapshot.hasData || snapshot.data == null) {
           return const LoginScreen();
         }
 
-        // ✅ Privater Bereich pro Account (uid)
+        // Eingeloggt → individueller Bereich
+        final user = snapshot.data!;
         return WeekPlanScreen(uid: user.uid);
       },
     );
