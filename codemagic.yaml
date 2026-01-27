@@ -22,7 +22,7 @@ workflows:
           mkdir -p android
           cat > android/gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
-          org.gradle.daemon=true
+          org.gradle.daemon=false
           org.gradle.parallel=true
           org.gradle.configureondemand=true
           org.gradle.caching=true
@@ -38,13 +38,28 @@ workflows:
         script: |
           flutter pub get
 
-      - name: Build debug APK (gradle with retries/timeouts)
+      - name: Build debug APK (save FULL gradle log)
         script: |
+          set -e
           flutter clean
           flutter pub get
+
           cd android
           ./gradlew --stop || true
-          ./gradlew --no-daemon assembleDebug --stacktrace --info --max-workers=2
+
+          # Run gradle and ALWAYS keep full log as artifact
+          set +e
+          ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=2 2>&1 | tee gradle.log
+          GRADLE_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$GRADLE_EXIT" -ne 0 ]; then
+            echo "---- TOP FAILURE/CAUSE LINES (if present) ----"
+            grep -n "FAILURE: Build failed|What went wrong:|Caused by:" -n gradle.log | tail -n 80 || true
+            echo "---- LAST 250 LINES ----"
+            tail -n 250 gradle.log || true
+            exit $GRADLE_EXIT
+          fi
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
-      - build/app/outputs/flutter-apk/app-debug.apk
+      - android/gradle.log
