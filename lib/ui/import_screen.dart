@@ -33,6 +33,7 @@ class _ImportScreenState extends State<ImportScreen> {
   int? _endCol;
   int? _mainCol;
   int? _ageCol;
+  int? _dateRangeCol; // NEW
 
   final Set<AgeClass> _fallbackAges = {AgeClass.u15};
 
@@ -41,7 +42,7 @@ class _ImportScreenState extends State<ImportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mappingOk = _nameCol != null && _startCol != null;
+    final mappingOk = _nameCol != null && (_dateRangeCol != null || _startCol != null);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Import (Excel/CSV)")),
@@ -100,9 +101,15 @@ class _ImportScreenState extends State<ImportScreen> {
               const SizedBox(height: 16),
               const Text("Spalten-Mapping:"),
               const SizedBox(height: 8),
+
               _col("Turniername*", _nameCol, (v) => setState(() => _nameCol = v)),
-              _col("Startdatum*", _startCol, (v) => setState(() => _startCol = v)),
-              _col("Enddatum", _endCol, (v) => setState(() => _endCol = v), allowNone: true),
+              _col("Datumsspanne (z.B. 18./19.10)", _dateRangeCol, (v) => setState(() => _dateRangeCol = v), allowNone: true),
+
+              if (_dateRangeCol == null) ...[
+                _col("Startdatum*", _startCol, (v) => setState(() => _startCol = v)),
+                _col("Enddatum", _endCol, (v) => setState(() => _endCol = v), allowNone: true),
+              ],
+
               _col("Hauptturnier", _mainCol, (v) => setState(() => _mainCol = v), allowNone: true),
               _col("Altersklasse", _ageCol, (v) => setState(() => _ageCol = v), allowNone: true),
 
@@ -192,6 +199,7 @@ class _ImportScreenState extends State<ImportScreen> {
       _endCol = null;
       _mainCol = null;
       _ageCol = null;
+      _dateRangeCol = null;
     });
 
     final res = await FilePicker.platform.pickFiles(
@@ -241,16 +249,34 @@ class _ImportScreenState extends State<ImportScreen> {
         final sheet = excel.sheets[sheetName];
         if (sheet == null || sheet.rows.isEmpty) return;
 
-        final headerRow = sheet.rows.first;
+        // auto header row: first non-empty row
+        int headerRow = 0;
+        for (int r = 0; r < sheet.rows.length; r++) {
+          final row = sheet.rows[r];
+          bool empty = true;
+          for (final c in row) {
+            final v = c?.value;
+            if (v != null && v.toString().trim().isNotEmpty) {
+              empty = false;
+              break;
+            }
+          }
+          if (!empty) {
+            headerRow = r;
+            break;
+          }
+        }
+
+        final headerRowCells = sheet.rows[headerRow];
         final headers = <String>[];
-        for (final c in headerRow) {
+        for (final c in headerRowCells) {
           final v = c?.value;
           final s = (v ?? "").toString().trim();
           headers.add(s.isEmpty ? "(leer)" : s);
         }
 
         final preview = <List<dynamic>>[];
-        for (int i = 1; i < sheet.rows.length && preview.length < 12; i++) {
+        for (int i = headerRow + 1; i < sheet.rows.length && preview.length < 12; i++) {
           preview.add(sheet.rows[i].map((c) => c?.value).toList());
         }
 
@@ -302,7 +328,8 @@ class _ImportScreenState extends State<ImportScreen> {
 
     setState(() {
       _nameCol ??= findCol(["TURNIER", "WETTKAMPF", "EVENT", "NAME"]);
-      _startCol ??= findCol(["START", "VON", "BEGINN", "DATUM"]);
+      _dateRangeCol ??= findCol(["ZEIT", "DATUM", "TERMIN", "TAG", "TAGE"]);
+      _startCol ??= findCol(["START", "VON", "BEGINN"]);
       _endCol ??= findCol(["ENDE", "BIS"]);
       _mainCol ??= findCol(["HAUPT", "MAIN"]);
       _ageCol ??= findCol(["ALTER", "KLASSE", "KATEGORIE", "U13", "U15", "U17", "U20"]);
@@ -312,7 +339,8 @@ class _ImportScreenState extends State<ImportScreen> {
   Future<void> _runImportReplace() async {
     final bytes = _bytes;
     if (bytes == null) return;
-    if (_nameCol == null || _startCol == null) return;
+    if (_nameCol == null) return;
+    if (_dateRangeCol == null && _startCol == null) return;
 
     setState(() {
       _busy = true;
@@ -338,19 +366,21 @@ class _ImportScreenState extends State<ImportScreen> {
 
       final mapping = ImportMapping(
         nameCol: _nameCol!,
-        startCol: _startCol!,
+        startCol: _startCol ?? 0,
         endCol: _endCol,
         isMainCol: _mainCol,
         ageClassCol: _ageCol,
+        dateRangeCol: _dateRangeCol,
+        headerRow: 0,
       );
 
       final fallback = _fallbackAges.toList();
 
-      List<Map<String, dynamic>> parsed;
+      ImportResult result;
       if (_isXlsx) {
         final sheetName = _sheet;
         if (sheetName == null) throw Exception("Kein Sheet gewählt.");
-        parsed = ImportService.parseXlsx(
+        result = ImportService.parseXlsx(
           bytes: bytes,
           sheetName: sheetName,
           mapping: mapping,
@@ -358,7 +388,7 @@ class _ImportScreenState extends State<ImportScreen> {
           fallbackAgeClasses: fallback,
         );
       } else {
-        parsed = ImportService.parseCsv(
+        result = ImportService.parseCsv(
           bytes: bytes,
           mapping: mapping,
           seasonStart: seasonStart,
@@ -366,8 +396,8 @@ class _ImportScreenState extends State<ImportScreen> {
         );
       }
 
-      if (parsed.isEmpty) {
-        setState(() => _status = "Keine Turniere erkannt.");
+      if (result.items.isEmpty) {
+        setState(() => _status = "Keine Turniere erkannt.\n${result.warnings.take(8).join("\n")}");
         return;
       }
 
@@ -383,12 +413,15 @@ class _ImportScreenState extends State<ImportScreen> {
       for (final d in existing.docs) {
         batch.delete(d.reference);
       }
-      for (final t in parsed) {
+      for (final t in result.items) {
         batch.set(col.doc(), t);
       }
       await batch.commit();
 
-      setState(() => _status = "Import OK: ${parsed.length} Turniere übernommen.");
+      final warnText = result.warnings.isEmpty
+          ? ""
+          : "\n\nHinweise (${result.warnings.length}):\n${result.warnings.take(10).join("\n")}";
+      setState(() => _status = "Import OK: ${result.items.length} Turniere übernommen.$warnText");
     } catch (e) {
       setState(() => _status = "Import-Fehler: $e");
     } finally {
