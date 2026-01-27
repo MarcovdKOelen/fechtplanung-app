@@ -43,7 +43,7 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
       body: StreamBuilder<List<TrainingUnit>>(
         stream: _fs.watchTrainingUnits(widget.uid),
         builder: (context, unitsSnap) {
-          final units = unitsSnap.data ?? const <TrainingUnit>[];
+          final allUnits = unitsSnap.data ?? const <TrainingUnit>[];
 
           return StreamBuilder<Map<String, dynamic>?>(
             stream: _fs.watchWeekOverride(
@@ -55,8 +55,10 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
             builder: (context, ovSnap) {
               final ov = ovSnap.data ?? {};
               final List<dynamic> raw = (ov["unitIds"] as List?) ?? const [];
+
+              final slotCount = widget.week.recommendedSessions;
               final List<String?> unitIds = List<String?>.generate(
-                widget.week.recommendedSessions,
+                slotCount,
                 (i) => i < raw.length ? (raw[i] as String?) : null,
               );
 
@@ -75,7 +77,7 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text("Ampel: ${ampelLabel(widget.week.ampel)}"),
-                          Text("Einheiten (Plan): ${widget.week.recommendedSessions}"),
+                          Text("Einheiten: $slotCount"),
                         ],
                       ),
                     ),
@@ -88,18 +90,19 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Trainingseinheiten (klick zum Austauschen)",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          const Text(
+                            "Trainingseinheiten (Tippen zum Austauschen)",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
                           const SizedBox(height: 10),
-
-                          for (int i = 0; i < widget.week.recommendedSessions; i++)
+                          for (int i = 0; i < slotCount; i++)
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(Icons.fitness_center),
-                              title: Text(_slotTitle(i, unitIds, units)),
-                              subtitle: Text(_slotSubtitle(i, unitIds, units)),
+                              title: Text(_slotTitle(i, unitIds, allUnits)),
+                              subtitle: Text(_slotSubtitle(i, unitIds, allUnits)),
                               trailing: const Icon(Icons.swap_horiz),
-                              onTap: () => _pickUnitForSlot(i, unitIds, units),
+                              onTap: () => _pickUnitForSlot(i, unitIds, allUnits),
                             ),
                         ],
                       ),
@@ -113,8 +116,7 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Turniere in dieser Woche",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          const Text("Turniere in dieser Woche", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 10),
                           if (widget.week.tournamentNames.isEmpty)
                             const Text("Keine Turniere in dieser Woche.")
@@ -140,7 +142,10 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
 
   String _slotTitle(int i, List<String?> unitIds, List<TrainingUnit> units) {
     final id = unitIds[i];
-    if (id == null || id.isEmpty) return "Slot ${i + 1}: ${widget.week.recommendations.elementAt(i)}";
+    if (id == null || id.isEmpty) {
+      final fallback = (i < widget.week.recommendations.length) ? widget.week.recommendations[i] : "Empfehlung";
+      return "Slot ${i + 1}: $fallback";
+    }
     final u = units.where((x) => x.id == id).cast<TrainingUnit?>().firstWhere((x) => x != null, orElse: () => null);
     return u == null ? "Slot ${i + 1}: (Unbekannt) → Default" : "Slot ${i + 1}: ${u.title}";
   }
@@ -151,12 +156,10 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
     final u = units.where((x) => x.id == id).cast<TrainingUnit?>().firstWhere((x) => x != null, orElse: () => null);
     if (u == null) return "Einheit nicht gefunden";
     final mins = u.minutes > 0 ? " • ${u.minutes} min" : "";
-    final desc = u.description.trim();
-    return (desc.isEmpty ? "Aus Katalog$mins" : "$desc$mins");
+    return (u.description.trim().isEmpty) ? "Aus Katalog$mins" : "${u.description}$mins";
   }
 
   Future<void> _pickUnitForSlot(int slotIndex, List<String?> current, List<TrainingUnit> all) async {
-    // filter by age class (if unit has empty ageClasses => allow)
     final units = all.where((u) => u.ageClasses.isEmpty || u.ageClasses.contains(widget.ageClass)).toList();
 
     final picked = await showModalBottomSheet<String?>(
@@ -182,7 +185,7 @@ class _WeekDetailScreenState extends State<WeekDetailScreen> {
                   return ListTile(
                     leading: const Icon(Icons.fitness_center),
                     title: Text(u.title),
-                    subtitle: Text((u.description.isEmpty ? "Katalog$mins" : "${u.description}$mins")),
+                    subtitle: Text(u.description.isEmpty ? "Katalog$mins" : "${u.description}$mins"),
                     onTap: () => Navigator.pop(context, u.id),
                   );
                 },
