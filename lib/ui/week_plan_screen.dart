@@ -23,13 +23,15 @@ class WeekPlanScreen extends StatefulWidget {
   State<WeekPlanScreen> createState() => _WeekPlanScreenState();
 }
 
-class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProviderStateMixin {
+class _WeekPlanScreenState extends State<WeekPlanScreen>
+    with SingleTickerProviderStateMixin {
   final _fs = FirestoreService();
 
   String _scopeId = "self";
   String _scopeLabel = "Ich";
 
-  late final TabController _tabs = TabController(length: AgeClass.values.length, vsync: this);
+  late final TabController _tabs =
+      TabController(length: AgeClass.values.length, vsync: this);
 
   @override
   void initState() {
@@ -38,6 +40,10 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
   }
 
   AgeClass get _activeAge => AgeClass.values[_tabs.index];
+
+  // =========================
+  // AMPEL-FARBEN (FIXED)
+  // =========================
 
   Color _ampelBg(WeekAmpel a) {
     switch (a) {
@@ -48,6 +54,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
       case WeekAmpel.rot:
         return Colors.red.withOpacity(0.18);
     }
+    // Fallback (sollte nie passieren, verhindert aber Build-Fehler)
+    return Colors.grey.withOpacity(0.12);
   }
 
   Color _ampelBorder(WeekAmpel a) {
@@ -59,7 +67,11 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
       case WeekAmpel.rot:
         return Colors.red.withOpacity(0.55);
     }
+    // Fallback
+    return Colors.grey.withOpacity(0.45);
   }
+
+  // =========================
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +93,10 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => SetupScreen(uid: widget.uid, scopeId: _scopeId)),
+                MaterialPageRoute(
+                  builder: (_) =>
+                      SetupScreen(uid: widget.uid, scopeId: _scopeId),
+                ),
               );
             },
           ),
@@ -90,7 +105,9 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => TrainingUnitsScreen(uid: widget.uid)),
+                MaterialPageRoute(
+                  builder: (_) => TrainingUnitsScreen(uid: widget.uid),
+                ),
               );
             },
           ),
@@ -98,9 +115,15 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             icon: const Icon(Icons.people),
             onPressed: () async {
               final profile = await _fs.profileRef(widget.uid).get();
-              final role = (profile.data()?["role"] ?? "trainer").toString();
+              final role =
+                  (profile.data()?["role"] ?? "trainer").toString();
               if (!mounted || role != "trainer") return;
-              Navigator.push(context, MaterialPageRoute(builder: (_) => AthletesScreen(uid: widget.uid)));
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AthletesScreen(uid: widget.uid),
+                ),
+              );
             },
           ),
           IconButton(
@@ -112,23 +135,32 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
       body: StreamBuilder(
         stream: _fs.watchProfile(widget.uid),
         builder: (context, profileSnap) {
-          final role = (profileSnap.data?["role"] ?? "trainer").toString();
+          final role =
+              (profileSnap.data?["role"] ?? "trainer").toString();
 
           return Column(
             children: [
               if (role == "trainer") _scopePicker(),
               Expanded(
                 child: StreamBuilder<Map<String, dynamic>>(
-                  stream: _fs.watchSettings(widget.uid, scopeId: _scopeId),
+                  stream:
+                      _fs.watchSettings(widget.uid, scopeId: _scopeId),
                   builder: (context, settingsSnap) {
                     final settings = settingsSnap.data ?? {};
-                    final seasonStart =
-                        DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
+                    final seasonStart = DateTime.parse(
+                      (settings["seasonStart"] ??
+                              DateTime.now().toIso8601String())
+                          .toString(),
+                    );
 
                     return StreamBuilder<List<Tournament>>(
-                      stream: _fs.watchTournaments(widget.uid, scopeId: _scopeId),
+                      stream: _fs.watchTournaments(
+                        widget.uid,
+                        scopeId: _scopeId,
+                      ),
                       builder: (context, tSnap) {
-                        final tournaments = tSnap.data ?? const <Tournament>[];
+                        final tournaments =
+                            tSnap.data ?? const <Tournament>[];
 
                         final weeks = PlanEngine.buildWeeks(
                           ageClass: _activeAge,
@@ -139,24 +171,30 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                         );
 
                         return ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 8),
                           itemCount: weeks.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 6),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 6),
                           itemBuilder: (context, i) {
                             final w = weeks[i];
 
                             return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10),
                               child: Material(
                                 color: _ampelBg(w.ampel),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius:
+                                    BorderRadius.circular(14),
                                 child: InkWell(
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius:
+                                      BorderRadius.circular(14),
                                   onTap: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => WeekDetailScreen(
+                                        builder: (_) =>
+                                            WeekDetailScreen(
                                           uid: widget.uid,
                                           scopeId: _scopeId,
                                           scopeLabel: _scopeLabel,
@@ -168,19 +206,27 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                                   },
                                   child: Container(
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: _ampelBorder(w.ampel), width: 1),
+                                      borderRadius:
+                                          BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color:
+                                            _ampelBorder(w.ampel),
+                                        width: 1,
+                                      ),
                                     ),
                                     child: ListTile(
                                       title: Text(
                                         "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
-                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                        style: const TextStyle(
+                                            fontWeight:
+                                                FontWeight.w600),
                                       ),
                                       subtitle: Text(
                                         "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
                                         "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                       ),
-                                      trailing: const Icon(Icons.chevron_right),
+                                      trailing: const Icon(
+                                          Icons.chevron_right),
                                     ),
                                   ),
                                 ),
@@ -207,7 +253,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
         final athletes = (snap.data as List?)?.cast() ?? const [];
         final items = <DropdownMenuItem<String>>[
           const DropdownMenuItem(value: "self", child: Text("Ich")),
-          for (final a in athletes) DropdownMenuItem(value: a.id, child: Text(a.name)),
+          for (final a in athletes)
+            DropdownMenuItem(value: a.id, child: Text(a.name)),
         ];
 
         return Padding(
@@ -223,7 +270,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                   if (v == null) return;
                   setState(() {
                     _scopeId = v;
-                    _scopeLabel = v == "self" ? "Ich" : (athletes.firstWhere((x) => x.id == v).name);
+                    _scopeLabel =
+                        v == "self"
+                            ? "Ich"
+                            : (athletes
+                                .firstWhere((x) => x.id == v)
+                                .name);
                   });
                 },
               ),
@@ -235,12 +287,19 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
   }
 
   Future<void> _export(BuildContext context) async {
-    final settings = (await _fs.settingsRef(widget.uid, scopeId: _scopeId).get()).data() ?? {};
-    final seasonStart =
-        DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
+    final settings =
+        (await _fs.settingsRef(widget.uid, scopeId: _scopeId).get())
+                .data() ??
+            {};
+    final seasonStart = DateTime.parse(
+      (settings["seasonStart"] ?? DateTime.now().toIso8601String())
+          .toString(),
+    );
 
-    final tournamentsQ = await _fs.tournamentsRef(widget.uid, scopeId: _scopeId).get();
-    final tournaments = tournamentsQ.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList();
+    final tournamentsQ =
+        await _fs.tournamentsRef(widget.uid, scopeId: _scopeId).get();
+    final tournaments =
+        tournamentsQ.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList();
 
     final weeks = PlanEngine.buildWeeks(
       ageClass: _activeAge,
@@ -253,11 +312,14 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
     ExportSheet.show(
       context,
       onXlsx: () async {
-        final bytes = ExportService.toXlsx(tournaments: tournaments, weeks: weeks);
+        final bytes =
+            ExportService.toXlsx(tournaments: tournaments, weeks: weeks);
         await ShareFile.shareBytes(
           bytes: bytes,
-          fileName: "Fechtplanung_${_scopeLabel}_${ageClassLabel(_activeAge)}.xlsx",
-          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          fileName:
+              "Fechtplanung_${_scopeLabel}_${ageClassLabel(_activeAge)}.xlsx",
+          mimeType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         );
       },
       onTournamentsCsv: () async {
@@ -272,10 +334,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
         final bytes = ExportService.weekplanCsv(weeks);
         await ShareFile.shareBytes(
           bytes: bytes,
-          fileName: "Wochenplan_${_scopeLabel}_${ageClassLabel(_activeAge)}.csv",
+          fileName:
+              "Wochenplan_${_scopeLabel}_${ageClassLabel(_activeAge)}.csv",
           mimeType: "text/csv",
         );
       },
     );
   }
 }
+
