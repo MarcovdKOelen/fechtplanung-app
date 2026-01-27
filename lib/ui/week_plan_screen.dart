@@ -14,6 +14,7 @@ import 'setup_screen.dart';
 import 'athletes_screen.dart';
 import 'export_sheet.dart';
 import 'week_detail_screen.dart';
+import 'training_units_screen.dart';
 
 class WeekPlanScreen extends StatefulWidget {
   final String uid;
@@ -72,6 +73,18 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
               );
             },
           ),
+
+          // NEW: Katalog-Editor (nur sinnvoll für Trainer; falls Sportler: optional ausblenden)
+          IconButton(
+            icon: const Icon(Icons.library_books),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => TrainingUnitsScreen(uid: widget.uid)),
+              );
+            },
+          ),
+
           IconButton(
             icon: const Icon(Icons.people),
             onPressed: () async {
@@ -130,16 +143,16 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                                 "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                               ),
                               trailing: const Icon(Icons.chevron_right),
-                             onTap: () {
-                              Navigator.push(
-                                context,
-                            MaterialPageRoute(
-                            builder: (_) => WeekDetailScreen(
-                                  uid: widget.uid,
-                                scopeId: _scopeId,
-                              scopeLabel: _scopeLabel,
-                            ageClass: _activeAge,
-                                week: w,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => WeekDetailScreen(
+                                      uid: widget.uid,
+                                      scopeId: _scopeId,
+                                      scopeLabel: _scopeLabel,
+                                      ageClass: _activeAge,
+                                      week: w,
                                     ),
                                   ),
                                 );
