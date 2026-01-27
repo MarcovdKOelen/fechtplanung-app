@@ -13,6 +13,14 @@ workflows:
         - $HOME/.pub-cache
 
     scripts:
+      - name: Flutter pub get
+        script: |
+          flutter pub get
+
+      - name: Update Android platform (v2 embedding)
+        script: |
+          flutter create --platforms=android .
+
       - name: Ensure google-services.json in place
         script: |
           mkdir -p android/app
@@ -38,11 +46,7 @@ workflows:
           android.enableJetifier=true
           EOF
 
-      - name: Get dependencies
-        script: |
-          flutter pub get
-
-      - name: Build debug APK (no clean, cached)
+      - name: Build debug APK (cached)
         script: |
           flutter build apk --debug --verbose
 
