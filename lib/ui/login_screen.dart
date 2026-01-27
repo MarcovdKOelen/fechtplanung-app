@@ -87,3 +87,42 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                               .toList(),
                           onChanged: (a) {
                             if (a == null) return;
+                            setState(() => _selectedAge = a);
+                          },
+                        ),
+                        const Spacer(),
+                        Text(
+                          "Saisonstart: ${_seasonStart.toIso8601String().substring(0, 10)}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: weeks.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final w = weeks[i];
+                        return ListTile(
+                          title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
+                          subtitle: Text(
+                            "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
+                            "Empfehlung: ${w.recommendations.join(' • ')}"
+                            "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                          ),
+                          trailing: Text(ampelLabel(w.ampel)),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
