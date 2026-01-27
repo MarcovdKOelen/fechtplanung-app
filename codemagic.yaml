@@ -4,26 +4,77 @@ workflows:
     max_build_duration: 60
     environment:
       flutter: stable
+
     scripts:
-      - name: Recreate Android platform
+      - name: Recreate Android platform (v2 embedding)
         script: |
           rm -rf android
           flutter create .
 
-      - name: Ensure google-services.json
+      - name: Ensure google-services.json in place
         script: |
           mkdir -p android/app
           if [ -f google-services.json ]; then
             cp google-services.json android/app/google-services.json
           fi
 
+      - name: Gradle/Kotlin stability settings
+        script: |
+          cat > android/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx6144m -Dfile.encoding=UTF-8
+          org.gradle.daemon=false
+          org.gradle.parallel=false
+          org.gradle.caching=true
+
+          # Network timeouts (keep, harmless)
+          systemProp.org.gradle.internal.http.connectionTimeout=900000
+          systemProp.org.gradle.internal.http.socketTimeout=900000
+
+          # Kotlin daemon crashes in CI -> disable daemon usage
+          kotlin.compiler.execution.strategy=in-process
+          kotlin.daemon.jvmargs=-Xmx1024m
+          kotlin.incremental=false
+
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
+
       - name: Get dependencies
         script: |
           flutter pub get
 
-      - name: Build debug APK
+      - name: Build debug APK (retry)
         script: |
-          flutter build apk --debug
-    artifacts:
-      - build/app/outputs/flutter-apk/app-debug.apk
+          set -e
+          flutter clean
+          flutter pub get
+          cd android
+          ./gradlew --stop || true
 
+          ATTEMPTS=3
+          for i in $(seq 1 $ATTEMPTS); do
+            echo "========== BUILD ATTEMPT $i / $ATTEMPTS =========="
+            set +e
+            ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain 2>&1 | tee gradle.log
+            EXIT=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$EXIT" -eq 0 ]; then
+              echo "Build succeeded."
+              exit 0
+            fi
+
+            echo "Build failed. Key lines:"
+            grep -n -E "Kotlin compile daemon|daemon has terminated|Could not download|Could not resolve|Read timed out|SocketTimeoutException|FAILURE: Build failed|What went wrong:|Caused by:" gradle.log | tail -n 160 || true
+
+            if [ "$i" -lt "$ATTEMPTS" ]; then
+              echo "Retrying in 20s..."
+              sleep 20
+            else
+              exit $EXIT
+            fi
+          done
+
+    artifacts:
+      - android/app/build/outputs/apk/debug/app-debug.apk
+      - android/gradle.log
