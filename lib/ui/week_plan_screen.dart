@@ -105,3 +105,23 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                       itemBuilder: (context, i) {
                         final w = weeks[i];
                         return ListTile(
+                          title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
+                          subtitle: Text(
+                            "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
+                            "Empfehlung: ${w.recommendations.join(' • ')}"
+                            "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                          ),
+                          trailing: Text(ampelLabel(w.ampel)),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
