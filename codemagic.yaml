@@ -1,16 +1,16 @@
 workflows:
   android-apk:
-    name: Android APK Build
+    name: Android APK Build (stable)
     max_build_duration: 60
     environment:
       flutter: stable
+      cache:
+        cache_paths:
+          - $HOME/.gradle/caches
+          - $HOME/.gradle/wrapper
+          - $HOME/.pub-cache
 
     scripts:
-      - name: Recreate Android platform (v2 embedding)
-        script: |
-          rm -rf android
-          flutter create .
-
       - name: Ensure google-services.json in place
         script: |
           mkdir -p android/app
@@ -30,7 +30,6 @@ workflows:
           systemProp.org.gradle.internal.http.socketTimeout=900000
 
           kotlin.compiler.execution.strategy=in-process
-          kotlin.daemon.jvmargs=-Xmx1024m
           kotlin.incremental=false
 
           android.useAndroidX=true
@@ -41,28 +40,9 @@ workflows:
         script: |
           flutter pub get
 
-      - name: Build debug APK (hard timeout via perl + key lines)
+      - name: Build debug APK (no clean, no recreate)
         script: |
-          set -e
-          flutter clean
-          flutter pub get
-          cd android
-          ./gradlew --stop || true
-
-          # Hard timeout 360s using perl alarm (works on macOS)
-          set +e
-          perl -e 'alarm 360; exec @ARGV' ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain 2>&1 | tee gradle.log
-          EXIT=${PIPESTATUS[0]}
-          set -e
-
-          echo "========== KEY LINES =========="
-          grep -n -E "Downloading|Download|Could not download|Could not resolve|Read timed out|SocketTimeoutException|FAILURE: Build failed|What went wrong:|Caused by:|Target kernel_snapshot_program failed|lib/.*Error:" gradle.log | tail -n 200 || true
-
-          if [ "$EXIT" -ne 0 ]; then
-            echo "Build step failed/timeout (exit $EXIT)."
-            exit "$EXIT"
-          fi
+          flutter build apk --debug --verbose
 
     artifacts:
-      - android/app/build/outputs/apk/debug/app-debug.apk
-      - android/gradle.log
+      - build/app/outputs/flutter-apk/app-debug.apk
