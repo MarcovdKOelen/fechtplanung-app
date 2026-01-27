@@ -13,6 +13,7 @@ import 'import_screen.dart';
 import 'setup_screen.dart';
 import 'athletes_screen.dart';
 import 'export_sheet.dart';
+import 'week_detail_screen.dart';
 
 class WeekPlanScreen extends StatefulWidget {
   final String uid;
@@ -25,7 +26,7 @@ class WeekPlanScreen extends StatefulWidget {
 class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProviderStateMixin {
   final _fs = FirestoreService();
 
-  String _scopeId = "self"; // "self" or athleteId
+  String _scopeId = "self";
   String _scopeLabel = "Ich";
 
   late final TabController _tabs = TabController(length: AgeClass.values.length, vsync: this);
@@ -100,7 +101,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                   stream: _fs.watchSettings(widget.uid, scopeId: _scopeId),
                   builder: (context, settingsSnap) {
                     final settings = settingsSnap.data ?? {};
-                    final seasonStartStr = (settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString();
+                    final seasonStartStr =
+                        (settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString();
                     final seasonStart = DateTime.parse(seasonStartStr);
 
                     return StreamBuilder<List<Tournament>>(
@@ -124,11 +126,24 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                             return ListTile(
                               title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
                               subtitle: Text(
-                                "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                "Empfehlung: ${w.recommendations.join(' • ')}"
+                                "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
                                 "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                               ),
-                              trailing: Text(ampelLabel(w.ampel)),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => WeekDetailScreen(
+                                      uid: widget.uid,
+                                      scopeId: _scopeId,
+                                      scopeLabel: _scopeLabel,
+                                      ageClass: _activeAge,
+                                      week: w,
+                                    ),
+                                  ),
+                                );
+                              },
                             );
                           },
                         );
@@ -167,9 +182,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                   if (v == null) return;
                   setState(() {
                     _scopeId = v;
-                    _scopeLabel = v == "self"
-                        ? "Ich"
-                        : (athletes.firstWhere((x) => x.id == v).name);
+                    _scopeLabel = v == "self" ? "Ich" : (athletes.firstWhere((x) => x.id == v).name);
                   });
                 },
               ),
@@ -183,7 +196,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
   Future<void> _export(BuildContext context) async {
     final settingsDoc = await _fs.settingsRef(widget.uid, scopeId: _scopeId).get();
     final settings = settingsDoc.data() ?? {};
-    final seasonStart = DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
+    final seasonStart =
+        DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
 
     final tournamentsQ = await _fs.tournamentsRef(widget.uid, scopeId: _scopeId).get();
     final tournaments = tournamentsQ.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList();
