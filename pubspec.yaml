@@ -1,22 +1,12 @@
 name: trainingsplanung_fechten_mvk
 description: Trainingsplanung Fechten MvK
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.2.0 <4.0.0'
+  sdk: ">=3.2.0 <4.0.0"
 
 dependencies:
-  flutter:
-    sdk: flutter
-  firebase_core: ^3.0.0
-  firebase_auth: ^5.0.0
-  cloud_firestore: ^5.0.0
-
-flutter:
-  uses-material-design: true
-  
-  dependencies:
   flutter:
     sdk: flutter
 
@@ -28,3 +18,9 @@ flutter:
   csv: ^6.0.0
   excel: ^4.0.0
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
