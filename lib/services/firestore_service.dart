@@ -20,7 +20,7 @@ class FirestoreService {
 
   CollectionReference<Map<String, dynamic>> athletesRef(String uid) => userDoc(uid).collection("athletes");
 
-  // Katalog bekannter Trainingseinheiten (pro Trainer/User)
+  // Trainingseinheiten-Katalog (pro User)
   CollectionReference<Map<String, dynamic>> trainingUnitsRef(String uid) =>
       userDoc(uid).collection("training_units");
 
@@ -148,8 +148,24 @@ class FirestoreService {
   }
 
   // Katalog stream
-  Stream<List<TrainingUnit>> watchTrainingUnits(String uid) =>
-      trainingUnitsRef(uid).snapshots().map((q) => q.docs.map((d) => TrainingUnit.fromDoc(d.id, d.data())).toList());
+  Stream<List<TrainingUnit>> watchTrainingUnits(String uid) => trainingUnitsRef(uid)
+      .orderBy("title")
+      .snapshots()
+      .map((q) => q.docs.map((d) => TrainingUnit.fromDoc(d.id, d.data())).toList());
+
+  // CRUD Katalog
+  Future<String> addTrainingUnit(String uid, TrainingUnit u) async {
+    final ref = await trainingUnitsRef(uid).add(u.toMap());
+    return ref.id;
+  }
+
+  Future<void> updateTrainingUnit(String uid, TrainingUnit u) async {
+    await trainingUnitsRef(uid).doc(u.id).set(u.toMap(), SetOptions(merge: true));
+  }
+
+  Future<void> deleteTrainingUnit(String uid, String unitId) async {
+    await trainingUnitsRef(uid).doc(unitId).delete();
+  }
 
   // Override stream
   Stream<Map<String, dynamic>?> watchWeekOverride(
