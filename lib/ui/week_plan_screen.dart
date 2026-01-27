@@ -40,6 +40,28 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
 
   AgeClass get _activeAge => AgeClass.values[_tabs.index];
 
+  Color _ampelBg(WeekAmpel a) {
+    switch (a) {
+      case WeekAmpel.gruen:
+        return Colors.green.withOpacity(0.18);
+      case WeekAmpel.gelb:
+        return Colors.amber.withOpacity(0.22);
+      case WeekAmpel.rot:
+        return Colors.red.withOpacity(0.18);
+    }
+  }
+
+  Color _ampelBorder(WeekAmpel a) {
+    switch (a) {
+      case WeekAmpel.gruen:
+        return Colors.green.withOpacity(0.55);
+      case WeekAmpel.gelb:
+        return Colors.amber.withOpacity(0.70);
+      case WeekAmpel.rot:
+        return Colors.red.withOpacity(0.55);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -73,8 +95,6 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
               );
             },
           ),
-
-          // NEW: Katalog-Editor (nur sinnvoll für Trainer; falls Sportler: optional ausblenden)
           IconButton(
             icon: const Icon(Icons.library_books),
             onPressed: () {
@@ -84,7 +104,6 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
               );
             },
           ),
-
           IconButton(
             icon: const Icon(Icons.people),
             onPressed: () async {
@@ -132,31 +151,55 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                         );
 
                         return ListView.separated(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: weeks.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          separatorBuilder: (_, __) => const SizedBox(height: 6),
                           itemBuilder: (context, i) {
                             final w = weeks[i];
-                            return ListTile(
-                              title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
-                              subtitle: Text(
-                                "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
-                                "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
-                              ),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => WeekDetailScreen(
-                                      uid: widget.uid,
-                                      scopeId: _scopeId,
-                                      scopeLabel: _scopeLabel,
-                                      ageClass: _activeAge,
-                                      week: w,
+
+                            final bg = _ampelBg(w.ampel);
+                            final border = _ampelBorder(w.ampel);
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: Material(
+                                color: bg,
+                                borderRadius: BorderRadius.circular(14),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => WeekDetailScreen(
+                                          uid: widget.uid,
+                                          scopeId: _scopeId,
+                                          scopeLabel: _scopeLabel,
+                                          ageClass: _activeAge,
+                                          week: w,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: border, width: 1),
+                                    ),
+                                    child: ListTile(
+                                      title: Text(
+                                        "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
+                                        style: const TextStyle(fontWeight: FontWeight.w600),
+                                      ),
+                                      subtitle: Text(
+                                        "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
+                                        "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                                      ),
+                                      trailing: const Icon(Icons.chevron_right),
                                     ),
                                   ),
-                                );
-                              },
+                                ),
+                              ),
                             );
                           },
                         );
