@@ -5,10 +5,19 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Get Flutter packages
+      - name: Flutter doctor
+        script: |
+          flutter doctor -v
+
+      - name: Create missing platform files
+        script: |
+          flutter create .
+
+      - name: Get dependencies
         script: |
           flutter pub get
-      - name: Build APK
+
+      - name: Build debug APK
         script: |
           flutter build apk --debug
     artifacts:
