@@ -41,7 +41,7 @@ workflows:
         script: |
           flutter pub get
 
-      - name: Build debug APK (timeout + show download lines)
+      - name: Build debug APK (hard timeout via perl + key lines)
         script: |
           set -e
           flutter clean
@@ -49,9 +49,9 @@ workflows:
           cd android
           ./gradlew --stop || true
 
-          # hard timeout at 6 minutes
+          # Hard timeout 360s using perl alarm (works on macOS)
           set +e
-          ( timeout 360 ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain ) 2>&1 | tee gradle.log
+          perl -e 'alarm 360; exec @ARGV' ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain 2>&1 | tee gradle.log
           EXIT=${PIPESTATUS[0]}
           set -e
 
