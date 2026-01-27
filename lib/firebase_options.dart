@@ -11,17 +11,18 @@ class DefaultFirebaseOptions {
       throw UnsupportedError('DefaultFirebaseOptions are not configured for web.');
     }
     switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return android;
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-      case TargetPlatform.windows:
-      case TargetPlatform.linux:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions are not configured for this platform.',
-        );
-    }
-  }
+  case TargetPlatform.android:
+    return android;
+  case TargetPlatform.iOS:
+  case TargetPlatform.macOS:
+  case TargetPlatform.windows:
+  case TargetPlatform.linux:
+  case TargetPlatform.fuchsia:
+    throw UnsupportedError(
+      'DefaultFirebaseOptions are not configured for this platform.',
+    );
+}
+
 
   // Values taken from google-services.json
   static const FirebaseOptions android = FirebaseOptions(
