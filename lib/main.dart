@@ -1,20 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'firebase_options.dart';
+import 'ui/login_screen.dart';
+import 'ui/week_plan_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    // Falls Firebase nicht initialisieren kann, zeigen wir es sichtbar an.
-    runApp(ErrorApp(error: e.toString()));
-    return;
-  }
-
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const App());
 }
 
@@ -26,32 +22,33 @@ class App extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Trainingsplanung Fechten MvK',
-      home: const Scaffold(
-        body: Center(child: Text('Firebase init OK ✅')),
-      ),
+      theme: ThemeData(useMaterial3: true),
+      home: const AuthGate(),
     );
   }
 }
 
-class ErrorApp extends StatelessWidget {
-  final String error;
-  const ErrorApp({super.key, required this.error});
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            child: Text(
-              "Firebase init FEHLER:\n\n$error",
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
-        ),
-      ),
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        final user = snap.data;
+
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        if (user == null) {
+          return const LoginScreen();
+        }
+
+        // ✅ Privater Bereich pro Account (uid)
+        return WeekPlanScreen(uid: user.uid);
+      },
     );
   }
 }
