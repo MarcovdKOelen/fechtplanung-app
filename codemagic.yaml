@@ -41,7 +41,7 @@ workflows:
         script: |
           flutter pub get
 
-      - name: Build debug APK (print REAL flutter error)
+      - name: Build debug APK (timeout + show download lines)
         script: |
           set -e
           flutter clean
@@ -49,21 +49,20 @@ workflows:
           cd android
           ./gradlew --stop || true
 
+          # hard timeout at 6 minutes
           set +e
-          ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain 2>&1 | tee gradle.log
+          ( timeout 360 ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain ) 2>&1 | tee gradle.log
           EXIT=${PIPESTATUS[0]}
           set -e
 
+          echo "========== KEY LINES =========="
+          grep -n -E "Downloading|Download|Could not download|Could not resolve|Read timed out|SocketTimeoutException|FAILURE: Build failed|What went wrong:|Caused by:|Target kernel_snapshot_program failed|lib/.*Error:" gradle.log | tail -n 200 || true
+
           if [ "$EXIT" -ne 0 ]; then
-            echo "========== FLUTTER ERROR LINES =========="
-            # zeigt die echte Flutter/Dart Fehlermeldung (steht fast immer vorher im Log)
-            grep -n -E "lib/|Error:|Exception:|Target kernel_snapshot_program failed|pubspec.yaml|Could not find|Undefined|Method not found|A problem occurred evaluating|Execution failed for task" gradle.log | tail -n 200 || true
-            echo "========== WHAT WENT WRONG =========="
-            awk '/\* What went wrong:/{p=1} p{print} /\* Try:/{if(p) exit}' gradle.log || true
+            echo "Build step failed/timeout (exit $EXIT)."
             exit "$EXIT"
           fi
 
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
       - android/gradle.log
-
