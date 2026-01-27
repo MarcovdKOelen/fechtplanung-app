@@ -5,9 +5,17 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Flutter doctor
+      - name: Recreate Android platform (v2 embedding)
         script: |
-          flutter doctor -v
+          rm -rf android
+          flutter create .
+
+      - name: Ensure google-services.json in place
+        script: |
+          mkdir -p android/app
+          if [ -f google-services.json ]; then
+            cp google-services.json android/app/google-services.json
+          fi
 
       - name: Get dependencies
         script: |
