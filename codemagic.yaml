@@ -5,71 +5,25 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Recreate Android platform (v2 embedding)
+      - name: Recreate Android platform
         script: |
           rm -rf android
           flutter create .
 
-      - name: Ensure google-services.json in place
+      - name: Ensure google-services.json
         script: |
           mkdir -p android/app
           if [ -f google-services.json ]; then
             cp google-services.json android/app/google-services.json
           fi
 
-      - name: Write gradle.properties (timeouts + low concurrency)
-        script: |
-          cat > android/gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
-          org.gradle.daemon=false
-          org.gradle.parallel=false
-          org.gradle.caching=true
-
-          systemProp.org.gradle.internal.http.connectionTimeout=600000
-          systemProp.org.gradle.internal.http.socketTimeout=600000
-
-          android.useAndroidX=true
-          android.enableJetifier=true
-          EOF
-
       - name: Get dependencies
         script: |
           flutter pub get
 
-      - name: Build debug APK (full log + extract REAL error block)
+      - name: Build debug APK
         script: |
-          set -e
-          flutter clean
-          flutter pub get
-          cd android
-          ./gradlew --stop || true
-
-          set +e
-          ./gradlew --no-daemon assembleDebug --stacktrace --info --warning-mode all --max-workers=1 --console=plain > gradle.log 2>&1
-          EXIT=$?
-          set -e
-
-          echo "========== PRINT: FIRST 120 LINES =========="
-          head -n 120 gradle.log || true
-
-          echo "========== PRINT: ERROR BLOCK (What went wrong / Caused by) =========="
-          # Druckt ab der ersten "What went wrong:" Zeile die nächsten 120 Zeilen
-          awk '
-            /What went wrong:/ {p=1; c=0}
-            p==1 {print; c++}
-            p==1 && c>=120 {exit}
-          ' gradle.log || true
-
-          echo "========== PRINT: ALL 'Caused by:' LINES =========="
-          grep -n "Caused by:" gradle.log | tail -n 50 || true
-
-          echo "========== PRINT: LAST 200 LINES =========="
-          tail -n 200 gradle.log || true
-
-          if [ "$EXIT" -ne 0 ]; then
-            exit "$EXIT"
-          fi
+          flutter build apk --debug
     artifacts:
-      - android/app/build/outputs/apk/debug/app-debug.apk
-      - android/gradle.log
+      - build/app/outputs/flutter-apk/app-debug.apk
 
