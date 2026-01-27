@@ -1,239 +1,206 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
-import '../models/age_class.dart';
 import '../models/week_plan.dart';
-import '../models/tournament.dart';
+import '../models/age_class.dart';
+import '../models/training_unit.dart';
 import '../services/firestore_service.dart';
-import '../services/plan_engine.dart';
-import '../services/export_service.dart';
-import '../services/share_file.dart';
 
-import 'import_screen.dart';
-import 'setup_screen.dart';
-import 'athletes_screen.dart';
-import 'export_sheet.dart';
-import 'week_detail_screen.dart';
-
-class WeekPlanScreen extends StatefulWidget {
+class WeekDetailScreen extends StatefulWidget {
   final String uid;
-  const WeekPlanScreen({super.key, required this.uid});
+  final String scopeId;
+  final String scopeLabel;
+  final AgeClass ageClass;
+  final WeekPlan week;
+
+  const WeekDetailScreen({
+    super.key,
+    required this.uid,
+    required this.scopeId,
+    required this.scopeLabel,
+    required this.ageClass,
+    required this.week,
+  });
 
   @override
-  State<WeekPlanScreen> createState() => _WeekPlanScreenState();
+  State<WeekDetailScreen> createState() => _WeekDetailScreenState();
 }
 
-class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProviderStateMixin {
+class _WeekDetailScreenState extends State<WeekDetailScreen> {
   final _fs = FirestoreService();
 
-  String _scopeId = "self"; // "self" or athleteId
-  String _scopeLabel = "Ich";
-
-  late final TabController _tabs = TabController(length: AgeClass.values.length, vsync: this);
-
-  @override
-  void initState() {
-    super.initState();
-    _fs.ensureDefaults(widget.uid);
-  }
-
-  AgeClass get _activeAge => AgeClass.values[_tabs.index];
+  String _d(DateTime d) => d.toIso8601String().substring(0, 10);
+  String get _weekKey => _d(widget.week.weekStart);
 
   @override
   Widget build(BuildContext context) {
+    final start = widget.week.weekStart;
+    final end = widget.week.weekStart.add(const Duration(days: 6));
+
     return Scaffold(
       appBar: AppBar(
-        title: Text("Wochenplan • $_scopeLabel"),
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: AgeClass.values.map((a) => Tab(text: ageClassLabel(a))).toList(),
-          onTap: (_) => setState(() {}),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ImportScreen(uid: widget.uid, scopeId: _scopeId)),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: () => _export(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => SetupScreen(uid: widget.uid, scopeId: _scopeId)),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.people),
-            onPressed: () async {
-              final profile = await _fs.profileRef(widget.uid).get();
-              final role = (profile.data()?["role"] ?? "trainer").toString();
-              if (!mounted) return;
-              if (role != "trainer") return;
-              Navigator.push(context, MaterialPageRoute(builder: (_) => AthletesScreen(uid: widget.uid)));
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => FirebaseAuth.instance.signOut(),
-          ),
-        ],
+        title: Text("KW ${widget.week.isoWeek} • ${ageClassLabel(widget.ageClass)} • ${widget.scopeLabel}"),
       ),
-      body: StreamBuilder(
-        stream: _fs.watchProfile(widget.uid),
-        builder: (context, profileSnap) {
-          final role = (profileSnap.data?["role"] ?? "trainer").toString();
+      body: StreamBuilder<List<TrainingUnit>>(
+        stream: _fs.watchTrainingUnits(widget.uid),
+        builder: (context, unitsSnap) {
+          final units = unitsSnap.data ?? const <TrainingUnit>[];
 
-          return Column(
-            children: [
-              if (role == "trainer") _scopePicker(),
-              Expanded(
-                child: StreamBuilder<Map<String, dynamic>>(
-                  stream: _fs.watchSettings(widget.uid, scopeId: _scopeId),
-                  builder: (context, settingsSnap) {
-                    final settings = settingsSnap.data ?? {};
-                    final seasonStartStr = (settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString();
-                    final seasonStart = DateTime.parse(seasonStartStr);
+          return StreamBuilder<Map<String, dynamic>?>(
+            stream: _fs.watchWeekOverride(
+              widget.uid,
+              scopeId: widget.scopeId,
+              ageClassName: widget.ageClass.name,
+              weekStartIsoDate: _weekKey,
+            ),
+            builder: (context, ovSnap) {
+              final ov = ovSnap.data ?? {};
+              final List<dynamic> raw = (ov["unitIds"] as List?) ?? const [];
+              final List<String?> unitIds = List<String?>.generate(
+                widget.week.recommendedSessions,
+                (i) => i < raw.length ? (raw[i] as String?) : null,
+              );
 
-                    return StreamBuilder<List<Tournament>>(
-                      stream: _fs.watchTournaments(widget.uid, scopeId: _scopeId),
-                      builder: (context, tSnap) {
-                        final tournaments = tSnap.data ?? const <Tournament>[];
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Zeitraum: ${_d(start)} – ${_d(end)}",
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          Text("Ampel: ${ampelLabel(widget.week.ampel)}"),
+                          Text("Einheiten (Plan): ${widget.week.recommendedSessions}"),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
-                        final weeks = PlanEngine.buildWeeks(
-                          ageClass: _activeAge,
-                          seasonStart: seasonStart,
-                          numberOfWeeks: 52,
-                          tournaments: tournaments,
-                          settings: settings,
-                        );
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Trainingseinheiten (klick zum Austauschen)",
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 10),
 
-                        return ListView.separated(
-                          itemCount: weeks.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, i) {
-                            final w = weeks[i];
-                            return ListTile(
-                              title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
-                              subtitle: Text(
-                                "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
-                                "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
-                              ),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => WeekDetailScreen(
-                                      scopeLabel: _scopeLabel,
-                                      ageClass: _activeAge,
-                                      week: w,
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+                          for (int i = 0; i < widget.week.recommendedSessions; i++)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.fitness_center),
+                              title: Text(_slotTitle(i, unitIds, units)),
+                              subtitle: Text(_slotSubtitle(i, unitIds, units)),
+                              trailing: const Icon(Icons.swap_horiz),
+                              onTap: () => _pickUnitForSlot(i, unitIds, units),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Turniere in dieser Woche",
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 10),
+                          if (widget.week.tournamentNames.isEmpty)
+                            const Text("Keine Turniere in dieser Woche.")
+                          else
+                            ...widget.week.tournamentNames.map((t) => ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(Icons.emoji_events),
+                                  title: Text(t),
+                                )),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
 
-  Widget _scopePicker() {
-    return StreamBuilder(
-      stream: _fs.watchAthletes(widget.uid),
-      builder: (context, snap) {
-        final athletes = (snap.data as List?)?.cast() ?? const [];
-        final items = <DropdownMenuItem<String>>[
-          const DropdownMenuItem(value: "self", child: Text("Ich")),
-          for (final a in athletes) DropdownMenuItem(value: a.id, child: Text(a.name)),
-        ];
-
-        return Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              const Text("Bereich: "),
-              const SizedBox(width: 10),
-              DropdownButton<String>(
-                value: _scopeId,
-                items: items,
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _scopeId = v;
-                    _scopeLabel = v == "self"
-                        ? "Ich"
-                        : (athletes.firstWhere((x) => x.id == v).name);
-                  });
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  String _slotTitle(int i, List<String?> unitIds, List<TrainingUnit> units) {
+    final id = unitIds[i];
+    if (id == null || id.isEmpty) return "Slot ${i + 1}: ${widget.week.recommendations.elementAt(i)}";
+    final u = units.where((x) => x.id == id).cast<TrainingUnit?>().firstWhere((x) => x != null, orElse: () => null);
+    return u == null ? "Slot ${i + 1}: (Unbekannt) → Default" : "Slot ${i + 1}: ${u.title}";
   }
 
-  Future<void> _export(BuildContext context) async {
-    final settingsDoc = await _fs.settingsRef(widget.uid, scopeId: _scopeId).get();
-    final settings = settingsDoc.data() ?? {};
-    final seasonStart = DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
+  String _slotSubtitle(int i, List<String?> unitIds, List<TrainingUnit> units) {
+    final id = unitIds[i];
+    if (id == null || id.isEmpty) return "Default-Empfehlung";
+    final u = units.where((x) => x.id == id).cast<TrainingUnit?>().firstWhere((x) => x != null, orElse: () => null);
+    if (u == null) return "Einheit nicht gefunden";
+    final mins = u.minutes > 0 ? " • ${u.minutes} min" : "";
+    final desc = u.description.trim();
+    return (desc.isEmpty ? "Aus Katalog$mins" : "$desc$mins");
+  }
 
-    final tournamentsQ = await _fs.tournamentsRef(widget.uid, scopeId: _scopeId).get();
-    final tournaments = tournamentsQ.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList();
+  Future<void> _pickUnitForSlot(int slotIndex, List<String?> current, List<TrainingUnit> all) async {
+    // filter by age class (if unit has empty ageClasses => allow)
+    final units = all.where((u) => u.ageClasses.isEmpty || u.ageClasses.contains(widget.ageClass)).toList();
 
-    final weeks = PlanEngine.buildWeeks(
-      ageClass: _activeAge,
-      seasonStart: seasonStart,
-      numberOfWeeks: 52,
-      tournaments: tournaments,
-      settings: settings,
+    final picked = await showModalBottomSheet<String?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: const Text("Default-Empfehlung verwenden"),
+              onTap: () => Navigator.pop(context, null),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: units.length,
+                itemBuilder: (_, i) {
+                  final u = units[i];
+                  final mins = u.minutes > 0 ? " • ${u.minutes} min" : "";
+                  return ListTile(
+                    leading: const Icon(Icons.fitness_center),
+                    title: Text(u.title),
+                    subtitle: Text((u.description.isEmpty ? "Katalog$mins" : "${u.description}$mins")),
+                    onTap: () => Navigator.pop(context, u.id),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
 
-    ExportSheet.show(
-      context,
-      onXlsx: () async {
-        final bytes = ExportService.toXlsx(tournaments: tournaments, weeks: weeks);
-        await ShareFile.shareBytes(
-          bytes: bytes,
-          fileName: "Fechtplanung_${_scopeLabel}_${ageClassLabel(_activeAge)}.xlsx",
-          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        );
-      },
-      onTournamentsCsv: () async {
-        final bytes = ExportService.tournamentsCsv(tournaments);
-        await ShareFile.shareBytes(
-          bytes: bytes,
-          fileName: "Turniere_${_scopeLabel}.csv",
-          mimeType: "text/csv",
-        );
-      },
-      onWeeksCsv: () async {
-        final bytes = ExportService.weekplanCsv(weeks);
-        await ShareFile.shareBytes(
-          bytes: bytes,
-          fileName: "Wochenplan_${_scopeLabel}_${ageClassLabel(_activeAge)}.csv",
-          mimeType: "text/csv",
-        );
-      },
+    final next = List<String?>.from(current);
+    next[slotIndex] = picked; // null => default
+    await _fs.saveWeekOverrideUnitIds(
+      widget.uid,
+      scopeId: widget.scopeId,
+      ageClassName: widget.ageClass.name,
+      weekStartIsoDate: _weekKey,
+      unitIds: next,
     );
   }
 }
