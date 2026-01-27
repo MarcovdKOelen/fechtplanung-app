@@ -1,6 +1,6 @@
 workflows:
   android-apk:
-    name: Android APK Build (stable)
+    name: Android APK Build (fix app module)
     max_build_duration: 60
 
     environment:
@@ -13,13 +13,10 @@ workflows:
         - $HOME/.pub-cache
 
     scripts:
-      - name: Flutter pub get
+      - name: Recreate Android as APP template (ensures :app exists)
         script: |
-          flutter pub get
-
-      - name: Update Android platform (v2 embedding)
-        script: |
-          flutter create --platforms=android .
+          rm -rf android
+          flutter create --template app --platforms=android --overwrite .
 
       - name: Ensure google-services.json in place
         script: |
@@ -28,25 +25,11 @@ workflows:
             cp google-services.json android/app/google-services.json
           fi
 
-      - name: Gradle/Kotlin stability settings
+      - name: Get dependencies
         script: |
-          cat > android/gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx6144m -Dfile.encoding=UTF-8
-          org.gradle.daemon=false
-          org.gradle.parallel=false
-          org.gradle.caching=true
+          flutter pub get
 
-          systemProp.org.gradle.internal.http.connectionTimeout=900000
-          systemProp.org.gradle.internal.http.socketTimeout=900000
-
-          kotlin.compiler.execution.strategy=in-process
-          kotlin.incremental=false
-
-          android.useAndroidX=true
-          android.enableJetifier=true
-          EOF
-
-      - name: Build debug APK (cached)
+      - name: Build debug APK
         script: |
           flutter build apk --debug --verbose
 
