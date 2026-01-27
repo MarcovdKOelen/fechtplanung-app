@@ -20,11 +20,11 @@ class FirestoreService {
 
   CollectionReference<Map<String, dynamic>> athletesRef(String uid) => userDoc(uid).collection("athletes");
 
-  // NEW: training units catalog per user
+  // Katalog bekannter Trainingseinheiten (pro Trainer/User)
   CollectionReference<Map<String, dynamic>> trainingUnitsRef(String uid) =>
       userDoc(uid).collection("training_units");
 
-  // NEW: per-scope overrides for weeks
+  // Overrides pro Woche (pro scope)
   CollectionReference<Map<String, dynamic>> weekOverridesRef(String uid, {String scopeId = "self"}) =>
       userDoc(uid).collection("scopes").doc(scopeId).collection("week_overrides");
 
@@ -36,16 +36,18 @@ class FirestoreService {
   }) =>
       weekOverridesRef(uid, scopeId: scopeId).doc("${ageClassName}_$weekStartIsoDate");
 
-  Stream<Map<String, dynamic>?> watchProfile(String uid) => profileRef(uid).snapshots().map((d) => d.data());
+  Stream<Map<String, dynamic>?> watchProfile(String uid) =>
+      profileRef(uid).snapshots().map((d) => d.data());
 
   Future<void> ensureDefaults(String uid) async {
     final p = await profileRef(uid).get();
     if (!p.exists) {
       await profileRef(uid).set({
-        "role": "trainer", // trainer | sportler
+        "role": "trainer",
         "createdAt": DateTime.now().toIso8601String(),
       });
     }
+
     final s = await settingsRef(uid, scopeId: "self").get();
     if (!s.exists) {
       await settingsRef(uid, scopeId: "self").set({
@@ -66,11 +68,12 @@ class FirestoreService {
       });
     }
 
-    // NEW: seed a few training units if empty
+    // Seed-Katalog, falls leer
     final tu = await trainingUnitsRef(uid).limit(1).get();
     if (tu.docs.isEmpty) {
       final batch = _db.batch();
       final col = trainingUnitsRef(uid);
+
       batch.set(col.doc(), {
         "title": "Beinarbeit Leiter (Koordination)",
         "description": "8–12 Min Koordination + Fußarbeit, Fokus Rhythmus/Distanz.",
@@ -78,6 +81,7 @@ class FirestoreService {
         "ageClasses": ["u13", "u15", "u17", "u20"],
         "updatedAt": DateTime.now().toIso8601String(),
       });
+
       batch.set(col.doc(), {
         "title": "Technik: Parade-Riposte (Florett)",
         "description": "Technikblock: 3 Serien à 6 Wiederholungen, dann Partnerdrill.",
@@ -85,6 +89,7 @@ class FirestoreService {
         "ageClasses": ["u15", "u17", "u20"],
         "updatedAt": DateTime.now().toIso8601String(),
       });
+
       batch.set(col.doc(), {
         "title": "Gefechte kurz (5 Treffer)",
         "description": "Mehrere kurze Gefechte, Fokus Aufgaben & Feedback.",
@@ -92,6 +97,7 @@ class FirestoreService {
         "ageClasses": ["u13", "u15", "u17", "u20"],
         "updatedAt": DateTime.now().toIso8601String(),
       });
+
       await batch.commit();
     }
   }
@@ -100,20 +106,9 @@ class FirestoreService {
       settingsRef(uid, scopeId: scopeId).snapshots().map((d) => d.data() ?? {});
 
   Stream<List<Tournament>> watchTournaments(String uid, {String scopeId = "self"}) =>
-      tournamentsRef(uid, scopeId: scopeId).snapshots().map((q) => q.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList());
-
-  Future<void> replaceAllTournaments(String uid, List<Map<String, dynamic>> items, {String scopeId = "self"}) async {
-    final col = tournamentsRef(uid, scopeId: scopeId);
-    final existing = await col.get();
-    final batch = _db.batch();
-    for (final d in existing.docs) {
-      batch.delete(d.reference);
-    }
-    for (final item in items) {
-      batch.set(col.doc(), item);
-    }
-    await batch.commit();
-  }
+      tournamentsRef(uid, scopeId: scopeId)
+          .snapshots()
+          .map((q) => q.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList());
 
   Stream<List<Athlete>> watchAthletes(String uid) =>
       athletesRef(uid).snapshots().map((q) => q.docs.map((d) => Athlete.fromDoc(d.id, d.data())).toList());
@@ -138,23 +133,25 @@ class FirestoreService {
     return ref.id;
   }
 
-  Future<void> saveProfileRole(String uid, String role) async {
-    await profileRef(uid).set({"role": role, "updatedAt": DateTime.now().toIso8601String()}, SetOptions(merge: true));
-  }
-
   Future<void> saveSeasonStart(String uid, DateTime d, {String scopeId = "self"}) async {
-    await settingsRef(uid, scopeId: scopeId).set({"seasonStart": d.toIso8601String(), "updatedAt": DateTime.now().toIso8601String()}, SetOptions(merge: true));
+    await settingsRef(uid, scopeId: scopeId).set(
+      {"seasonStart": d.toIso8601String(), "updatedAt": DateTime.now().toIso8601String()},
+      SetOptions(merge: true),
+    );
   }
 
   Future<void> saveSessions(String uid, Map<String, dynamic> sessions, {String scopeId = "self"}) async {
-    await settingsRef(uid, scopeId: scopeId).set({"sessions": sessions, "updatedAt": DateTime.now().toIso8601String()}, SetOptions(merge: true));
+    await settingsRef(uid, scopeId: scopeId).set(
+      {"sessions": sessions, "updatedAt": DateTime.now().toIso8601String()},
+      SetOptions(merge: true),
+    );
   }
 
-  // NEW: training units stream
+  // Katalog stream
   Stream<List<TrainingUnit>> watchTrainingUnits(String uid) =>
       trainingUnitsRef(uid).snapshots().map((q) => q.docs.map((d) => TrainingUnit.fromDoc(d.id, d.data())).toList());
 
-  // NEW: per-week override stream
+  // Override stream
   Stream<Map<String, dynamic>?> watchWeekOverride(
     String uid, {
     required String scopeId,
@@ -165,12 +162,13 @@ class FirestoreService {
           .snapshots()
           .map((d) => d.data());
 
+  // Override speichern: Liste von Unit-IDs pro Slot, null => Default
   Future<void> saveWeekOverrideUnitIds(
     String uid, {
     required String scopeId,
     required String ageClassName,
     required String weekStartIsoDate,
-    required List<String?> unitIds, // null => default
+    required List<String?> unitIds,
   }) async {
     await weekOverrideDoc(uid, scopeId: scopeId, ageClassName: ageClassName, weekStartIsoDate: weekStartIsoDate).set({
       "unitIds": unitIds,
