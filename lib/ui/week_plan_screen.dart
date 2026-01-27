@@ -130,16 +130,16 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                                 "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                               ),
                               trailing: const Icon(Icons.chevron_right),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => WeekDetailScreen(
-                                      uid: widget.uid,
-                                      scopeId: _scopeId,
-                                      scopeLabel: _scopeLabel,
-                                      ageClass: _activeAge,
-                                      week: w,
+                             onTap: () {
+                              Navigator.push(
+                                context,
+                            MaterialPageRoute(
+                            builder: (_) => WeekDetailScreen(
+                                  uid: widget.uid,
+                                scopeId: _scopeId,
+                              scopeLabel: _scopeLabel,
+                            ageClass: _activeAge,
+                                week: w,
                                     ),
                                   ),
                                 );
