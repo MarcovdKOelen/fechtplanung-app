@@ -9,7 +9,6 @@ import '../services/plan_engine.dart';
 import '../services/export_service.dart';
 import '../services/share_file.dart';
 
-import 'import_screen.dart';
 import 'setup_screen.dart';
 import 'athletes_screen.dart';
 import 'export_sheet.dart';
@@ -56,7 +55,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
       case WeekAmpel.gruen:
         return Colors.green.withOpacity(0.55);
       case WeekAmpel.gelb:
-        return Colors.amber.withOpacity(0.70);
+        return Colors.amber.withOpacity(0.7);
       case WeekAmpel.rot:
         return Colors.red.withOpacity(0.55);
     }
@@ -73,15 +72,6 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
           onTap: (_) => setState(() {}),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ImportScreen(uid: widget.uid, scopeId: _scopeId)),
-              );
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.download),
             onPressed: () => _export(context),
@@ -109,8 +99,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             onPressed: () async {
               final profile = await _fs.profileRef(widget.uid).get();
               final role = (profile.data()?["role"] ?? "trainer").toString();
-              if (!mounted) return;
-              if (role != "trainer") return;
+              if (!mounted || role != "trainer") return;
               Navigator.push(context, MaterialPageRoute(builder: (_) => AthletesScreen(uid: widget.uid)));
             },
           ),
@@ -133,9 +122,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                   stream: _fs.watchSettings(widget.uid, scopeId: _scopeId),
                   builder: (context, settingsSnap) {
                     final settings = settingsSnap.data ?? {};
-                    final seasonStartStr =
-                        (settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString();
-                    final seasonStart = DateTime.parse(seasonStartStr);
+                    final seasonStart =
+                        DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
 
                     return StreamBuilder<List<Tournament>>(
                       stream: _fs.watchTournaments(widget.uid, scopeId: _scopeId),
@@ -157,13 +145,10 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                           itemBuilder: (context, i) {
                             final w = weeks[i];
 
-                            final bg = _ampelBg(w.ampel);
-                            final border = _ampelBorder(w.ampel);
-
                             return Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 10),
                               child: Material(
-                                color: bg,
+                                color: _ampelBg(w.ampel),
                                 borderRadius: BorderRadius.circular(14),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(14),
@@ -184,7 +169,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                                   child: Container(
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: border, width: 1),
+                                      border: Border.all(color: _ampelBorder(w.ampel), width: 1),
                                     ),
                                     child: ListTile(
                                       title: Text(
@@ -250,8 +235,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
   }
 
   Future<void> _export(BuildContext context) async {
-    final settingsDoc = await _fs.settingsRef(widget.uid, scopeId: _scopeId).get();
-    final settings = settingsDoc.data() ?? {};
+    final settings = (await _fs.settingsRef(widget.uid, scopeId: _scopeId).get()).data() ?? {};
     final seasonStart =
         DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
 
