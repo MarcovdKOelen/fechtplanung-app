@@ -2,13 +2,15 @@ workflows:
   android-apk:
     name: Android APK Build (stable)
     max_build_duration: 60
+
     environment:
       flutter: stable
-      cache:
-        cache_paths:
-          - $HOME/.gradle/caches
-          - $HOME/.gradle/wrapper
-          - $HOME/.pub-cache
+
+    cache:
+      cache_paths:
+        - $HOME/.gradle/caches
+        - $HOME/.gradle/wrapper
+        - $HOME/.pub-cache
 
     scripts:
       - name: Ensure google-services.json in place
@@ -40,7 +42,7 @@ workflows:
         script: |
           flutter pub get
 
-      - name: Build debug APK (no clean, no recreate)
+      - name: Build debug APK (no clean, cached)
         script: |
           flutter build apk --debug --verbose
 
