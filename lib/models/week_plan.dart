@@ -18,17 +18,22 @@ class WeekPlan {
   final DateTime weekStart; // Montag
   final int isoWeek;
   final Ampel ampel;
+
+  /// Anzahl empfohlener Trainingstage
   final int recommendedSessions;
-  final List<String> recommendations;
+
+  /// Tagesempfehlungen Mo–So (null = kein Training)
+  final List<String?> dayRecommendations;
+
   final List<String> tournamentNames;
 
-  WeekPlan({
+  const WeekPlan({
     required this.ageClass,
     required this.weekStart,
     required this.isoWeek,
     required this.ampel,
     required this.recommendedSessions,
-    required this.recommendations,
+    required this.dayRecommendations,
     required this.tournamentNames,
-  });
+  }) : assert(dayRecommendations.length == 7);
 }
