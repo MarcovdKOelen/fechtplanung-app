@@ -15,8 +15,7 @@ class PlanEngine {
 
     final firstThursday = DateTime(thursday.year, 1, 4);
     final firstThursdayDayOfWeek = firstThursday.weekday;
-    final firstWeekThursday =
-        firstThursday.add(Duration(days: 4 - firstThursdayDayOfWeek));
+    final firstWeekThursday = firstThursday.add(Duration(days: 4 - firstThursdayDayOfWeek));
 
     final diffDays = thursday.difference(firstWeekThursday).inDays;
     return 1 + (diffDays ~/ 7);
@@ -28,24 +27,34 @@ class PlanEngine {
     Ampel.rot: ["Aktivierung + Technik", "Locker Technik"],
   };
 
-  static int sessionsFor(Ampel a) {
+  static int _readInt(Map<String, dynamic> settings, String key, int fallback) {
+    final v = settings[key];
+    if (v == null) return fallback;
+    if (v is int) return v;
+    return int.tryParse(v.toString()) ?? fallback;
+  }
+
+  static int sessionsFor(Ampel a, Map<String, dynamic> settings) {
+    // Trainer kann setzen:
+    // sessions_green, sessions_yellow, sessions_red
     switch (a) {
-      case Ampel.rot:
-        return 2;
-      case Ampel.gelb:
-        return 3;
       case Ampel.gruen:
-        return 4;
+        return _readInt(settings, "sessions_green", 4);
+      case Ampel.gelb:
+        return _readInt(settings, "sessions_yellow", 3);
+      case Ampel.rot:
+        return _readInt(settings, "sessions_red", 2);
     }
   }
 
-  // tournaments: Map enthält mindestens
-  // name, startDate, endDate, isMain, ageClasses (Liste mit z.B. "u15")
+  // tournaments: Map enthält mindestens:
+  // name, startDate, endDate, isMain, ageClasses (Liste z.B. ["u15"])
   static List<WeekPlan> buildWeeks({
     required AgeClass ageClass,
     required DateTime seasonStart,
     required int numberOfWeeks,
     required List<Map<String, dynamic>> tournaments,
+    Map<String, dynamic> settings = const {},
   }) {
     final startMon = toMonday(seasonStart);
     final weeks = <WeekPlan>[];
@@ -55,10 +64,7 @@ class PlanEngine {
       final we = ws.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
 
       final relevant = tournaments.where((t) {
-        final ages = (t["ageClasses"] as List? ?? const [])
-            .map((x) => x.toString())
-            .toList();
-
+        final ages = (t["ageClasses"] as List? ?? const []).map((x) => x.toString()).toList();
         if (!ages.contains(ageClass.name)) return false;
 
         final sd = DateTime.parse(t["startDate"].toString());
@@ -70,18 +76,24 @@ class PlanEngine {
       final hasMain = relevant.any((t) => (t["isMain"] ?? false) == true);
 
       final ampel = hasMain ? Ampel.rot : (hasT ? Ampel.gelb : Ampel.gruen);
-      final sessions = sessionsFor(ampel);
+      final sessions = sessionsFor(ampel, settings);
+
       final recs = (defaultRecs[ampel] ?? const <String>[]).take(sessions).toList();
 
-      weeks.add(WeekPlan(
-        ageClass: ageClass,
-        weekStart: ws,
-        isoWeek: isoWeekNum(ws),
-        ampel: ampel,
-        recommendedSessions: sessions,
-        recommendations: recs,
-        tournamentNames: relevant.map((t) => (t["name"] ?? "").toString()).where((s) => s.isNotEmpty).toList(),
-      ));
+      weeks.add(
+        WeekPlan(
+          ageClass: ageClass,
+          weekStart: ws,
+          isoWeek: isoWeekNum(ws),
+          ampel: ampel,
+          recommendedSessions: sessions,
+          recommendations: recs,
+          tournamentNames: relevant
+              .map((t) => (t["name"] ?? "").toString())
+              .where((s) => s.isNotEmpty)
+              .toList(),
+        ),
+      );
     }
 
     return weeks;
