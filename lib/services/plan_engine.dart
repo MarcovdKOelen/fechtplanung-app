@@ -1,6 +1,5 @@
 import '../models/age_class.dart';
 import '../models/week_plan.dart';
-import '../models/tournament.dart';
 
 class PlanEngine {
   static DateTime toMonday(DateTime d) {
@@ -16,7 +15,8 @@ class PlanEngine {
 
     final firstThursday = DateTime(thursday.year, 1, 4);
     final firstThursdayDayOfWeek = firstThursday.weekday;
-    final firstWeekThursday = firstThursday.add(Duration(days: 4 - firstThursdayDayOfWeek));
+    final firstWeekThursday =
+        firstThursday.add(Duration(days: 4 - firstThursdayDayOfWeek));
 
     final diffDays = thursday.difference(firstWeekThursday).inDays;
     return 1 + (diffDays ~/ 7);
@@ -28,56 +28,50 @@ class PlanEngine {
     Ampel.rot: ["Aktivierung + Technik", "Locker Technik"],
   };
 
+  static int sessionsFor(Ampel a) {
+    switch (a) {
+      case Ampel.rot:
+        return 2;
+      case Ampel.gelb:
+        return 3;
+      case Ampel.gruen:
+        return 4;
+    }
+  }
+
+  // tournaments: Map enthält mindestens
+  // name, startDate, endDate, isMain, ageClasses (Liste mit z.B. "u15")
   static List<WeekPlan> buildWeeks({
     required AgeClass ageClass,
     required DateTime seasonStart,
     required int numberOfWeeks,
-    required List<Tournament> tournaments,
-    required Map<String, dynamic> settings,
+    required List<Map<String, dynamic>> tournaments,
   }) {
     final startMon = toMonday(seasonStart);
-
-    Map<String, dynamic> sessionsCfgFor(AgeClass a) {
-      final all = settings["sessions"] as Map<String, dynamic>? ?? {};
-      return (all[a.name] as Map<String, dynamic>?) ??
-          {"gruen": 4, "gelb": 3, "rot": 2};
-    }
-
-    final cfg = sessionsCfgFor(ageClass);
-    int sessionsFor(Ampel ampel) {
-      final key = ampel.name;
-      final v = cfg[key];
-      if (v is int) return v;
-      if (v is num) return v.toInt();
-      return ampel == Ampel.rot ? 2 : (ampel == Ampel.gelb ? 3 : 4);
-    }
-
-    List<String> recsFor(Ampel ampel, int count) {
-      final custom = settings["recommendations"] as Map<String, dynamic>? ?? {};
-      final list = (custom[ampel.name] as List?)?.map((e) => e.toString()).toList();
-      final base = list ?? (defaultRecs[ampel] ?? const <String>[]);
-      if (base.isEmpty) return const [];
-      return base.take(count).toList();
-    }
-
     final weeks = <WeekPlan>[];
+
     for (int i = 0; i < numberOfWeeks; i++) {
       final ws = startMon.add(Duration(days: i * 7));
       final we = ws.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
 
       final relevant = tournaments.where((t) {
-        final ageOk = t.ageClasses.contains(ageClass);
-        if (!ageOk) return false;
-        final overlaps = !(t.endDate.isBefore(ws) || t.startDate.isAfter(we));
-        return overlaps;
+        final ages = (t["ageClasses"] as List? ?? const [])
+            .map((x) => x.toString())
+            .toList();
+
+        if (!ages.contains(ageClass.name)) return false;
+
+        final sd = DateTime.parse(t["startDate"].toString());
+        final ed = DateTime.parse(t["endDate"].toString());
+        return !(ed.isBefore(ws) || sd.isAfter(we));
       }).toList();
 
       final hasT = relevant.isNotEmpty;
-      final hasMain = relevant.any((t) => t.isMain);
+      final hasMain = relevant.any((t) => (t["isMain"] ?? false) == true);
 
       final ampel = hasMain ? Ampel.rot : (hasT ? Ampel.gelb : Ampel.gruen);
       final sessions = sessionsFor(ampel);
-      final recs = recsFor(ampel, sessions);
+      final recs = (defaultRecs[ampel] ?? const <String>[]).take(sessions).toList();
 
       weeks.add(WeekPlan(
         ageClass: ageClass,
@@ -86,7 +80,7 @@ class PlanEngine {
         ampel: ampel,
         recommendedSessions: sessions,
         recommendations: recs,
-        tournamentNames: relevant.map((t) => t.name).toList(),
+        tournamentNames: relevant.map((t) => (t["name"] ?? "").toString()).where((s) => s.isNotEmpty).toList(),
       ));
     }
 
