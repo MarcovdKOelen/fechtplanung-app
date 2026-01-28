@@ -78,6 +78,16 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     );
   }
 
+  String _dayRecSummary(WeekPlan w) {
+    final items = <String>[];
+    for (int i = 0; i < w.dayRecommendations.length; i++) {
+      final r = w.dayRecommendations[i];
+      if (r != null && r.trim().isNotEmpty) items.add(r.trim());
+      if (items.length >= 4) break;
+    }
+    return items.isEmpty ? "-" : items.join(" • ");
+  }
+
   void _openArchive(List<WeekPlan> pastWeeks) {
     showModalBottomSheet(
       context: context,
@@ -124,7 +134,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                 ),
                                 subtitle: Text(
                                   "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                  "Empfehlung: ${w.recommendations.join(' • ')}"
+                                  "Tages-Empfehlungen: ${_dayRecSummary(w)}"
                                   "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                 ),
                                 trailing: Text(ampelLabel(w.ampel)),
@@ -207,8 +217,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
               }
             }
 
-            past.sort((a, b) => b.weekStart.compareTo(a.weekStart)); // neueste zuerst
-            future.sort((a, b) => a.weekStart.compareTo(b.weekStart)); // chronologisch
+            past.sort((a, b) => b.weekStart.compareTo(a.weekStart));
+            future.sort((a, b) => a.weekStart.compareTo(b.weekStart));
 
             final visible = <WeekPlan>[
               if (current != null) current!,
@@ -285,7 +295,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                   ),
                                   subtitle: Text(
                                     "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                    "Empfehlung: ${w.recommendations.join(' • ')}"
+                                    "Tages-Empfehlungen: ${_dayRecSummary(w)}"
                                     "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                   ),
                                   trailing: Text(ampelLabel(w.ampel)),
