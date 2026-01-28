@@ -54,6 +54,30 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     return _dateOnly(w.weekStart).isBefore(_dateOnly(cutoff));
   }
 
+  Future<void> _pickSeasonStart(DateTime current) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime(2035, 12, 31),
+    );
+    if (picked == null) return;
+
+    final ref = FirebaseFirestore.instance
+        .collection("users")
+        .doc(widget.uid)
+        .collection("settings")
+        .doc("main");
+
+    await ref.set(
+      {
+        "seasonStart": DateTime(picked.year, picked.month, picked.day).toIso8601String(),
+        "updatedAt": DateTime.now().toIso8601String(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
   void _openArchive(List<WeekPlan> pastWeeks) {
     showModalBottomSheet(
       context: context,
@@ -211,12 +235,10 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                         DropdownButton<AgeClass>(
                           value: _age,
                           items: AgeClass.values
-                              .map(
-                                (a) => DropdownMenuItem(
-                                  value: a,
-                                  child: Text(ageClassLabel(a)),
-                                ),
-                              )
+                              .map((a) => DropdownMenuItem(
+                                    value: a,
+                                    child: Text(ageClassLabel(a)),
+                                  ))
                               .toList(),
                           onChanged: (v) {
                             if (v == null) return;
@@ -224,9 +246,18 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                           },
                         ),
                         const Spacer(),
-                        Text(
-                          "Saisonstart: ${seasonStart.toIso8601String().substring(0, 10)}",
-                          style: const TextStyle(fontSize: 12),
+                        InkWell(
+                          onTap: () => _pickSeasonStart(seasonStart),
+                          child: Row(
+                            children: [
+                              Text(
+                                "Saisonstart: ${seasonStart.toIso8601String().substring(0, 10)}",
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.edit_calendar_outlined, size: 18),
+                            ],
+                          ),
                         ),
                       ],
                     ),
