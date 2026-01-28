@@ -25,33 +25,28 @@ class PlanEngine {
   // === Trainingseinheiten je Ampel ===
   static const Map<Ampel, List<String>> defaultRecs = {
     Ampel.gruen: [
-      // umbenannt
+      "Aufwärmung",
       "Freie Athletik Auswahl",
       "Beinarbeit Kondition",
       "Technik/Taktik",
       "15er Gefechte",
-
-      // neu hinzugefügt
       "Fechten mit Aufgabenstellung",
       "Mobilitätstraining",
       "Dehnung/Stabilität",
     ],
     Ampel.gelb: [
-      // umbenannt
+      "Aufwärmung",
       "Technik/Taktik",
       "10er Gefechte",
       "Athletik kurz",
-
-      // neu hinzugefügt
       "Mobilität",
       "Dehnung/Stabilität",
       "Fechten mit Aufgabenstellung auf 5 Treffer",
     ],
     Ampel.rot: [
+      "Aufwärmung",
       "Aktivierung + Technik",
       "Locker Technik",
-
-      // neu hinzugefügt
       "Mobilität",
       "einfache Partnerübung",
     ],
