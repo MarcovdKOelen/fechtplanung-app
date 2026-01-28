@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/week_plan.dart';
 
 class WeekDetailScreen extends StatelessWidget {
+  final String uid;
   final WeekPlan week;
-  const WeekDetailScreen({super.key, required this.week});
+
+  const WeekDetailScreen({
+    super.key,
+    required this.uid,
+    required this.week,
+  });
 
   // --- helpers ---
   String _d(DateTime d) => d.toIso8601String().substring(0, 10);
@@ -56,177 +63,272 @@ class WeekDetailScreen extends StatelessWidget {
     }
   }
 
-  // verteilt Empfehlungen auf die Woche (Mo, Di, Do, Fr als Default-Trainingstage)
-  Map<int, String> _buildSessionPlan() {
+  List<int> _defaultTrainingDays() => const [0, 1, 3, 4]; // fallback (Mo, Di, Do, Fr)
+
+  List<int> _sanitizeDays(dynamic v) {
+    final list = (v is List) ? v : const [];
+    final days = list.map((e) => int.tryParse(e.toString()) ?? -1).where((x) => x >= 0 && x <= 6).toSet().toList();
+    days.sort();
+    return days;
+  }
+
+  Map<int, String> _buildDayPlan({
+    required List<int> trainingDays,
+  }) {
     final result = <int, String>{};
 
+    if (trainingDays.isEmpty) return result;
+
+    final sessions = week.recommendedSessions;
     final recs = week.recommendations;
-    final count = week.recommendedSessions;
 
-    if (count <= 0) return result;
-
-    // default training days: Mo, Di, Do, Fr (4)
-    final slots = <int>[0, 1, 3, 4];
-
-    // wenn weniger Einheiten: von vorne
-    // wenn mehr als 4: fülle Mi (2) und Sa (5) zusätzlich
-    final expandedSlots = <int>[
-      ...slots,
-      2,
-      5,
-    ];
-
-    final useSlots = expandedSlots.take(count.clamp(0, 6)).toList();
-
-    for (int i = 0; i < useSlots.length; i++) {
-      final day = useSlots[i];
+    final count = sessions.clamp(0, trainingDays.length);
+    for (int i = 0; i < count; i++) {
+      final dayIndex = trainingDays[i];
       final label = (i < recs.length) ? recs[i] : "Training";
-      result[day] = label;
+      result[dayIndex] = label;
     }
 
     return result;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final sessionPlan = _buildSessionPlan();
+  Future<void> _openTrainingDaysEditor(BuildContext context, List<int> current) async {
+    final selected = current.toSet();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("KW ${week.isoWeek} • Details"),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Header card
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _ampelBg(week.ampel),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(_ampelIcon(week.ampel)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "${_d(week.weekStart)} – ${_d(_weekEnd)}",
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      Text("Ampel: ${ampelLabel(week.ampel)}"),
-                      Text("Empfohlene Einheiten: ${week.recommendedSessions}"),
-                      if (week.tournamentNames.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          "Turnier: ${week.tournamentNames.join(', ')}",
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
+                const Row(
+                  children: [
+                    Icon(Icons.calendar_month_outlined),
+                    SizedBox(width: 8),
+                    Text(
+                      "Trainingstage festlegen",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: List.generate(7, (i) {
+                    final label = _weekdayLabel(i);
+                    final isOn = selected.contains(i);
+                    return FilterChip(
+                      label: Text(label),
+                      selected: isOn,
+                      onSelected: (val) {
+                        if (val) {
+                          selected.add(i);
+                        } else {
+                          selected.remove(i);
+                        }
+                        // ignore: invalid_use_of_protected_member
+                        (context as Element).markNeedsBuild();
+                      },
+                    );
+                  }),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.save),
+                    label: const Text("Speichern"),
+                    onPressed: () async {
+                      final days = selected.toList()..sort();
+                      final ref = FirebaseFirestore.instance
+                          .collection("users")
+                          .doc(uid)
+                          .collection("settings")
+                          .doc("main");
+
+                      await ref.set(
+                        {
+                          "trainingDays": days,
+                          "updatedAt": DateTime.now().toIso8601String(),
+                        },
+                        SetOptions(merge: true),
+                      );
+
+                      if (context.mounted) Navigator.pop(context);
+                    },
                   ),
                 ),
               ],
             ),
           ),
+        );
+      },
+    );
+  }
 
-          const SizedBox(height: 16),
+  @override
+  Widget build(BuildContext context) {
+    final settingsRef = FirebaseFirestore.instance
+        .collection("users")
+        .doc(uid)
+        .collection("settings")
+        .doc("main");
 
-          // Wochenübersicht (Tage)
-          const Text(
-            "Wochenübersicht",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: settingsRef.snapshots(),
+      builder: (context, snap) {
+        final data = snap.data?.data() ?? {};
+        final trainingDays = _sanitizeDays(data["trainingDays"]);
+        final effectiveDays = trainingDays.isEmpty ? _defaultTrainingDays() : trainingDays;
+
+        final dayPlan = _buildDayPlan(trainingDays: effectiveDays);
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text("KW ${week.isoWeek} • Details"),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.edit_calendar_outlined),
+                onPressed: () => _openTrainingDaysEditor(context, effectiveDays),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-
-          Card(
-            child: Column(
-              children: List.generate(7, (i) {
-                final dayDate = _day(i);
-                final hasSession = sessionPlan.containsKey(i);
-                final sessionLabel = sessionPlan[i];
-
-                return Column(
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _ampelBg(week.ampel),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ListTile(
-                      dense: true,
-                      leading: Container(
-                        width: 42,
-                        alignment: Alignment.center,
-                        child: Text(
-                          _weekdayLabel(i),
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
+                    Icon(_ampelIcon(week.ampel)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "${_d(week.weekStart)} – ${_d(_weekEnd)}",
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 6),
+                          Text("Ampel: ${ampelLabel(week.ampel)}"),
+                          Text("Empfohlene Einheiten: ${week.recommendedSessions}"),
+                          const SizedBox(height: 6),
+                          Text("Trainingstage: ${effectiveDays.map(_weekdayLabel).join(", ")}"),
+                          if (week.tournamentNames.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              "Turnier: ${week.tournamentNames.join(', ')}",
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
                       ),
-                      title: Text(_d(dayDate)),
-                      subtitle: hasSession ? Text("Einheit: $sessionLabel") : const Text("Kein Training geplant"),
-                      trailing: hasSession ? const Icon(Icons.fitness_center) : null,
                     ),
-                    if (i != 6) const Divider(height: 1),
                   ],
-                );
-              }),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Trainingsempfehlungen
-          const Text(
-            "Trainingsempfehlungen",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-
-          if (week.recommendations.isEmpty)
-            const Card(
-              child: ListTile(
-                title: Text("Keine Empfehlungen hinterlegt."),
-              ),
-            )
-          else
-            ...week.recommendations.map(
-              (e) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.playlist_add_check),
-                  title: Text(e),
                 ),
               ),
-            ),
 
-          const SizedBox(height: 16),
-
-          // Turniere
-          const Text(
-            "Turniere",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-
-          if (week.tournamentNames.isEmpty)
-            const Card(
-              child: ListTile(
-                leading: Icon(Icons.emoji_events_outlined),
-                title: Text("Keine Turniere in dieser Woche."),
+              const SizedBox(height: 16),
+              const Text(
+                "Wochenübersicht",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
-            )
-          else
-            ...week.tournamentNames.map(
-              (t) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.emoji_events_outlined),
-                  title: Text(t),
+              const SizedBox(height: 8),
+
+              Card(
+                child: Column(
+                  children: List.generate(7, (i) {
+                    final dayDate = _day(i);
+                    final isTrainingDay = effectiveDays.contains(i);
+                    final label = dayPlan[i];
+
+                    final subtitle = !isTrainingDay
+                        ? "Kein Trainingstag"
+                        : (label == null ? "Training (ohne konkrete Empfehlung)" : "Empfehlung: $label");
+
+                    return Column(
+                      children: [
+                        ListTile(
+                          dense: true,
+                          leading: SizedBox(
+                            width: 42,
+                            child: Center(
+                              child: Text(
+                                _weekdayLabel(i),
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                          title: Text(_d(dayDate)),
+                          subtitle: Text(subtitle),
+                          trailing: isTrainingDay ? const Icon(Icons.fitness_center) : null,
+                        ),
+                        if (i != 6) const Divider(height: 1),
+                      ],
+                    );
+                  }),
                 ),
               ),
-            ),
-        ],
-      ),
+
+              const SizedBox(height: 16),
+              const Text(
+                "Empfehlungen (Woche)",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+
+              if (week.recommendations.isEmpty)
+                const Card(child: ListTile(title: Text("Keine Empfehlungen hinterlegt.")))
+              else
+                ...week.recommendations.map(
+                  (e) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.playlist_add_check),
+                      title: Text(e),
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+              const Text(
+                "Turniere",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+
+              if (week.tournamentNames.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.emoji_events_outlined),
+                    title: Text("Keine Turniere in dieser Woche."),
+                  ),
+                )
+              else
+                ...week.tournamentNames.map(
+                  (t) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.emoji_events_outlined),
+                      title: Text(t),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
+
