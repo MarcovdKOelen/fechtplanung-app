@@ -27,7 +27,7 @@ class WeekDetailScreen extends StatelessWidget {
 
   bool _isMobility(String s) {
     final t = s.trim().toLowerCase();
-    return t.startsWith("mobilität"); // akzeptiert: Mobilität, Mobilitätstraining, ...
+    return t.startsWith("mobilität");
   }
 
   bool _isStretchStab(String s) => s.trim().toLowerCase() == "dehnung/stabilität";
@@ -41,10 +41,6 @@ class WeekDetailScreen extends StatelessWidget {
     return hash;
   }
 
-  /// Basierend auf Regeln:
-  /// 1) Aufwärmung immer zuerst
-  /// 2) Mobilität ODER Dehnung/Stabilität genau 1x (zufällig, stabil)
-  /// 3) Rest zufällig, aber ohne Aufwärmung/Mobilität/Dehnung
   List<String> _baseFourRecsForDay(int dayIndex) {
     final rng = Random(_stableSeedForDay(week.weekStart, dayIndex));
     final pool = week.recommendations;
@@ -93,20 +89,16 @@ class WeekDetailScreen extends StatelessWidget {
   List<String> _allowedOptionsForSlot(int slotIndex) {
     final pool = week.recommendations;
 
-    // Slot 0: Aufwärmung fix
     if (slotIndex == 0) return const ["Aufwärmung"];
 
-    // Slot 1: nur Mobilität* oder Dehnung/Stabilität
     if (slotIndex == 1) {
       final opts = <String>[];
       opts.addAll(pool.where(_isMobility));
       opts.addAll(pool.where(_isStretchStab));
-      // Dedupe
       final dedup = opts.toSet().toList()..sort();
       return dedup;
     }
 
-    // Slot 2-3: alles außer Aufwärmung/Mobilität/Dehnung
     final opts = pool.where((e) {
       if (_isWarmup(e)) return false;
       if (_isMobility(e)) return false;
@@ -123,23 +115,19 @@ class WeekDetailScreen extends StatelessWidget {
     required Map<String, dynamic> dayOverrides,
     required List<String> base,
   }) {
-    final key = dayIndex.toString();
-    final raw = dayOverrides[key];
-
+    final raw = dayOverrides[dayIndex.toString()];
     if (raw is! List) return base;
 
     final overridden = raw.map((e) => e.toString()).toList();
     if (overridden.length != 4) return base;
 
-    // Validierung pro Slot (damit Regeln nicht kaputtgehen)
+    if (overridden[0] != "Aufwärmung") return base;
+
     for (int i = 0; i < 4; i++) {
       final allowed = _allowedOptionsForSlot(i);
-      if (allowed.isEmpty) continue; // falls z.B. keine Mobilität/Dehnung im Pool
+      if (allowed.isEmpty) continue;
       if (!allowed.contains(overridden[i])) return base;
     }
-
-    // Slot0 muss Aufwärmung bleiben
-    if (overridden[0] != "Aufwärmung") return base;
 
     return overridden;
   }
@@ -152,15 +140,10 @@ class WeekDetailScreen extends StatelessWidget {
     required List<String> currentDayList,
     required Map<String, dynamic> dayOverrides,
   }) async {
-    final options = _allowedOptionsForSlot(slotIndex);
-
-    // Slot 0: nicht editierbar
     if (slotIndex == 0) return;
 
-    if (options.isEmpty) {
-      // z.B. Mobilität/Dehnung existiert nicht im Pool -> nichts auswählbar
-      return;
-    }
+    final options = _allowedOptionsForSlot(slotIndex);
+    if (options.isEmpty) return;
 
     final selected = await showModalBottomSheet<String>(
       context: context,
@@ -203,20 +186,14 @@ class WeekDetailScreen extends StatelessWidget {
 
     if (selected == null) return;
 
-    // Update overrides map (pro Tag)
     final nextDay = List<String>.from(currentDayList);
     nextDay[slotIndex] = selected;
-
-    // Optional: Duplikate innerhalb eines Tages minimieren (Slots 2/3)
-    // Wenn Slot 2/3 doppelt wird, lassen wir es trotzdem zu (Trainer entscheidet).
 
     final nextOverrides = Map<String, dynamic>.from(dayOverrides);
     nextOverrides[dayIndex.toString()] = nextDay;
 
     await weekRef.set(
-      {
-        "dayOverrides": nextOverrides,
-      },
+      {"dayOverrides": nextOverrides},
       SetOptions(merge: true),
     );
   }
@@ -250,11 +227,32 @@ class WeekDetailScreen extends StatelessWidget {
             ? Map<String, dynamic>.from(data["dayOverrides"] as Map)
             : <String, dynamic>{};
 
-        Future<void> save({bool? tf, List<int>? td}) async {
+        Future<void> _setTrainingFree(bool v) async {
+          if (v) {
+            // trainingsfrei AN: Trainingstage + Overrides leeren
+            await weekRef.set(
+              {
+                "trainingFree": true,
+                "trainingDays": [],
+                "dayOverrides": {},
+              },
+              SetOptions(merge: true),
+            );
+          } else {
+            // trainingsfrei AUS: nur Flag setzen (Trainingstage bleiben wie sie sind)
+            await weekRef.set(
+              {"trainingFree": false},
+              SetOptions(merge: true),
+            );
+          }
+        }
+
+        Future<void> _setTrainingDays(Set<int> next) async {
+          final list = next.toList()..sort();
           await weekRef.set(
             {
-              "trainingFree": tf ?? trainingFree,
-              "trainingDays": (tf ?? trainingFree) ? [] : (td ?? trainingDays),
+              "trainingFree": false, // sobald Tage gesetzt werden, ist nicht trainingsfrei
+              "trainingDays": list,
             },
             SetOptions(merge: true),
           );
@@ -268,7 +266,7 @@ class WeekDetailScreen extends StatelessWidget {
               SwitchListTile(
                 title: const Text("Diese Woche trainingsfrei"),
                 value: trainingFree,
-                onChanged: (v) => save(tf: v, td: const []),
+                onChanged: (v) async => _setTrainingFree(v),
               ),
               const Divider(),
 
@@ -288,7 +286,7 @@ class WeekDetailScreen extends StatelessWidget {
                         : (v) {
                             final next = {...selected};
                             v ? next.add(i) : next.remove(i);
-                            save(td: next.toList()..sort());
+                            _setTrainingDays(next);
                           },
                   );
                 }),
