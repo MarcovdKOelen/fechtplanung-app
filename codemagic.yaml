@@ -1,29 +1,13 @@
 workflows:
   android-apk:
-    name: Android APK Build (fix app module)
+    name: Android APK Build
     max_build_duration: 60
-
     environment:
       flutter: stable
-
-    cache:
-      cache_paths:
-        - $HOME/.gradle/caches
-        - $HOME/.gradle/wrapper
-        - $HOME/.pub-cache
-
     scripts:
-      - name: Recreate Android as APP template (ensures :app exists)
+      - name: Flutter doctor
         script: |
-          rm -rf android
-          flutter create --template app --platforms=android --overwrite .
-
-      - name: Ensure google-services.json in place
-        script: |
-          mkdir -p android/app
-          if [ -f google-services.json ]; then
-            cp google-services.json android/app/google-services.json
-          fi
+          flutter doctor -v
 
       - name: Get dependencies
         script: |
@@ -31,7 +15,6 @@ workflows:
 
       - name: Build debug APK
         script: |
-          flutter build apk --debug --verbose
-
+          flutter build apk --debug
     artifacts:
       - build/app/outputs/flutter-apk/app-debug.apk
