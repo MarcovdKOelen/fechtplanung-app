@@ -22,10 +22,39 @@ class PlanEngine {
     return 1 + (diffDays ~/ 7);
   }
 
+  // === Trainingseinheiten je Ampel ===
   static const Map<Ampel, List<String>> defaultRecs = {
-    Ampel.gruen: ["Athletik Basis", "Beinarbeit Volumen", "Technik/Taktik", "Gefechte intensiv"],
-    Ampel.gelb: ["Technik/Taktik", "Gefechte kurz", "Athletik kurz"],
-    Ampel.rot: ["Aktivierung + Technik", "Locker Technik"],
+    Ampel.gruen: [
+      // umbenannt
+      "Freie Athletik Auswahl",
+      "Beinarbeit Kondition",
+      "Technik/Taktik",
+      "15er Gefechte",
+
+      // neu hinzugefügt
+      "Fechten mit Aufgabenstellung",
+      "Mobilitätstraining",
+      "Dehnung/Stabilität",
+    ],
+    Ampel.gelb: [
+      // umbenannt
+      "Technik/Taktik",
+      "10er Gefechte",
+      "Athletik kurz",
+
+      // neu hinzugefügt
+      "Mobilität",
+      "Dehnung/Stabilität",
+      "Fechten mit Aufgabenstellung auf 5 Treffer",
+    ],
+    Ampel.rot: [
+      "Aktivierung + Technik",
+      "Locker Technik",
+
+      // neu hinzugefügt
+      "Mobilität",
+      "einfache Partnerübung",
+    ],
   };
 
   static int _readInt(Map<String, dynamic> settings, String key, int fallback) {
@@ -46,8 +75,6 @@ class PlanEngine {
     }
   }
 
-  // tournaments: Map enthält mindestens:
-  // name, startDate, endDate, isMain, ageClasses (Liste z.B. ["u15"])
   static List<WeekPlan> buildWeeks({
     required AgeClass ageClass,
     required DateTime seasonStart,
@@ -80,7 +107,7 @@ class PlanEngine {
       final ampel = hasMain ? Ampel.rot : (hasT ? Ampel.gelb : Ampel.gruen);
       final sessions = sessionsFor(ampel, settings);
 
-      final recs = (defaultRecs[ampel] ?? const <String>[]).take(sessions).toList();
+      final recs = defaultRecs[ampel] ?? const <String>[];
 
       weeks.add(
         WeekPlan(
