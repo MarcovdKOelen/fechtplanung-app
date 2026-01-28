@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/age_class.dart';
-import '../models/week_plan.dart';
 import '../models/tournament.dart';
 import '../services/firestore_service.dart';
 import '../services/plan_engine.dart';
 import '../services/export_service.dart';
 import '../services/share_file.dart';
 
+import 'import_screen.dart';
 import 'setup_screen.dart';
 import 'athletes_screen.dart';
 import 'export_sheet.dart';
-import 'week_detail_screen.dart';
-import 'training_units_screen.dart';
 
 class WeekPlanScreen extends StatefulWidget {
   final String uid;
@@ -26,7 +24,7 @@ class WeekPlanScreen extends StatefulWidget {
 class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProviderStateMixin {
   final _fs = FirestoreService();
 
-  String _scopeId = "self";
+  String _scopeId = "self"; // "self" oder athleteId
   String _scopeLabel = "Ich";
 
   late final TabController _tabs = TabController(length: AgeClass.values.length, vsync: this);
@@ -38,21 +36,6 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
   }
 
   AgeClass get _activeAge => AgeClass.values[_tabs.index];
-
-  // FIX: kein switch/case (case braucht const) -> if/else
-  Color _ampelBg(WeekAmpel a) {
-    if (a == WeekAmpel.gruen) return Colors.green.withOpacity(0.18);
-    if (a == WeekAmpel.gelb) return Colors.amber.withOpacity(0.22);
-    if (a == WeekAmpel.rot) return Colors.red.withOpacity(0.18);
-    return Colors.grey.withOpacity(0.12);
-  }
-
-  Color _ampelBorder(WeekAmpel a) {
-    if (a == WeekAmpel.gruen) return Colors.green.withOpacity(0.55);
-    if (a == WeekAmpel.gelb) return Colors.amber.withOpacity(0.7);
-    if (a == WeekAmpel.rot) return Colors.red.withOpacity(0.55);
-    return Colors.grey.withOpacity(0.45);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +49,17 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.upload_file),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ImportScreen(uid: widget.uid, scopeId: _scopeId),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.download),
             onPressed: () => _export(context),
           ),
@@ -74,16 +68,9 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => SetupScreen(uid: widget.uid, scopeId: _scopeId)),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.library_books),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => TrainingUnitsScreen(uid: widget.uid)),
+                MaterialPageRoute(
+                  builder: (_) => SetupScreen(uid: widget.uid, scopeId: _scopeId),
+                ),
               );
             },
           ),
@@ -92,8 +79,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             onPressed: () async {
               final profile = await _fs.profileRef(widget.uid).get();
               final role = (profile.data()?["role"] ?? "trainer").toString();
-              if (!mounted || role != "trainer") return;
-              Navigator.push(context, MaterialPageRoute(builder: (_) => AthletesScreen(uid: widget.uid)));
+              if (!mounted) return;
+              if (role != "trainer") return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => AthletesScreen(uid: widget.uid)),
+              );
             },
           ),
           IconButton(
@@ -111,18 +102,17 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
             children: [
               if (role == "trainer") _scopePicker(),
               Expanded(
-                child: StreamBuilder<Map<String, dynamic>>(
+                child: StreamBuilder(
                   stream: _fs.watchSettings(widget.uid, scopeId: _scopeId),
                   builder: (context, settingsSnap) {
-                    final settings = settingsSnap.data ?? {};
-                    final seasonStart = DateTime.parse(
-                      (settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString(),
-                    );
+                    final settings = (settingsSnap.data as Map<String, dynamic>?) ?? {};
+                    final seasonStartStr = (settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString();
+                    final seasonStart = DateTime.parse(seasonStartStr);
 
-                    return StreamBuilder<List<Tournament>>(
+                    return StreamBuilder(
                       stream: _fs.watchTournaments(widget.uid, scopeId: _scopeId),
                       builder: (context, tSnap) {
-                        final tournaments = tSnap.data ?? const <Tournament>[];
+                        final tournaments = (tSnap.data as List<Tournament>?) ?? const <Tournament>[];
 
                         final weeks = PlanEngine.buildWeeks(
                           ageClass: _activeAge,
@@ -133,52 +123,18 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                         );
 
                         return ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: weeks.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 6),
+                          separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, i) {
                             final w = weeks[i];
-
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              child: Material(
-                                color: _ampelBg(w.ampel),
-                                borderRadius: BorderRadius.circular(14),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(14),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => WeekDetailScreen(
-                                          uid: widget.uid,
-                                          scopeId: _scopeId,
-                                          scopeLabel: _scopeLabel,
-                                          ageClass: _activeAge,
-                                          week: w,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: _ampelBorder(w.ampel), width: 1),
-                                    ),
-                                    child: ListTile(
-                                      title: Text(
-                                        "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
-                                        style: const TextStyle(fontWeight: FontWeight.w600),
-                                      ),
-                                      subtitle: Text(
-                                        "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
-                                        "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
-                                      ),
-                                      trailing: const Icon(Icons.chevron_right),
-                                    ),
-                                  ),
-                                ),
+                            return ListTile(
+                              title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
+                              subtitle: Text(
+                                "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
+                                "Empfehlung: ${w.recommendations.join(' • ')}"
+                                "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                               ),
+                              trailing: Text(ampelLabel(w.ampel)),
                             );
                           },
                         );
@@ -217,7 +173,9 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
                   if (v == null) return;
                   setState(() {
                     _scopeId = v;
-                    _scopeLabel = v == "self" ? "Ich" : (athletes.firstWhere((x) => x.id == v).name);
+                    _scopeLabel = v == "self"
+                        ? "Ich"
+                        : (athletes.firstWhere((x) => x.id == v).name);
                   });
                 },
               ),
@@ -229,25 +187,25 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
   }
 
   Future<void> _export(BuildContext context) async {
-    final settings = (await _fs.settingsRef(widget.uid, scopeId: _scopeId).get()).data() ?? {};
-    final seasonStart =
-        DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
+    final sDoc = await _fs.settingsRef(widget.uid, scopeId: _scopeId).get();
+    final settings = sDoc.data() ?? {};
+    final seasonStart = DateTime.parse((settings["seasonStart"] ?? DateTime.now().toIso8601String()).toString());
 
-    final tournamentsQ = await _fs.tournamentsRef(widget.uid, scopeId: _scopeId).get();
-    final tournaments = tournamentsQ.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList();
+    final tQ = await _fs.tournamentsRef(widget.uid, scopeId: _scopeId).get();
+    final t = tQ.docs.map((d) => Tournament.fromDoc(d.id, d.data())).toList();
 
     final weeks = PlanEngine.buildWeeks(
       ageClass: _activeAge,
       seasonStart: seasonStart,
       numberOfWeeks: 52,
-      tournaments: tournaments,
+      tournaments: t,
       settings: settings,
     );
 
     ExportSheet.show(
       context,
       onXlsx: () async {
-        final bytes = ExportService.toXlsx(tournaments: tournaments, weeks: weeks);
+        final bytes = ExportService.toXlsx(tournaments: t, weeks: weeks);
         await ShareFile.shareBytes(
           bytes: bytes,
           fileName: "Fechtplanung_${_scopeLabel}_${ageClassLabel(_activeAge)}.xlsx",
@@ -255,7 +213,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> with SingleTickerProvid
         );
       },
       onTournamentsCsv: () async {
-        final bytes = ExportService.tournamentsCsv(tournaments);
+        final bytes = ExportService.tournamentsCsv(t);
         await ShareFile.shareBytes(
           bytes: bytes,
           fileName: "Turniere_${_scopeLabel}.csv",
