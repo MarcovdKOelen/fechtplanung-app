@@ -23,6 +23,17 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     return DateTime(y, 10, 1);
   }
 
+  Color _ampelBackground(Ampel a) {
+    switch (a) {
+      case Ampel.gruen:
+        return Colors.green.withOpacity(0.08);
+      case Ampel.gelb:
+        return Colors.orange.withOpacity(0.08);
+      case Ampel.rot:
+        return Colors.red.withOpacity(0.08);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settingsRef = FirebaseFirestore.instance
@@ -111,16 +122,23 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                           const Divider(height: 1),
                       itemBuilder: (context, i) {
                         final w = weeks[i];
-                        return ListTile(
-                          title: Text(
-                            "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
+                        return Container(
+                          color: _ampelBackground(w.ampel),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
                           ),
-                          subtitle: Text(
-                            "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                            "Empfehlung: ${w.recommendations.join(' • ')}"
-                            "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                          child: ListTile(
+                            title: Text(
+                              "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
+                            ),
+                            subtitle: Text(
+                              "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
+                              "Empfehlung: ${w.recommendations.join(' • ')}"
+                              "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                            ),
+                            trailing: Text(ampelLabel(w.ampel)),
                           ),
-                          trailing: Text(ampelLabel(w.ampel)),
                         );
                       },
                     ),
