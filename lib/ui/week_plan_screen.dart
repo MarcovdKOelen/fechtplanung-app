@@ -18,9 +18,7 @@ class WeekPlanScreen extends StatelessWidget {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => ImportScreen(uid: uid),
-                ),
+                MaterialPageRoute(builder: (_) => ImportScreen(uid: uid)),
               );
             },
           ),
@@ -32,10 +30,7 @@ class WeekPlanScreen extends StatelessWidget {
       ),
       body: const Center(
         child: Text(
-          "Wochenplan bereit.\n\n"
-          "• Import Excel / CSV\n"
-          "• Turniere pro Saison\n\n"
-          "Keine Zähl- oder Trackingfunktionen aktiv.",
+          "Wochenplan (Basis)\n\nImport Excel/CSV verfügbar.\n\nKein Zähler / kein Tracking.",
           textAlign: TextAlign.center,
         ),
       ),
