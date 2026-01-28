@@ -22,7 +22,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Trainingsplanung Fechten MvK',
-      theme: ThemeData(useMaterial3: true),
+      theme: ThemeData(
+        useMaterial3: true,
+      ),
       home: const AuthGate(),
     );
   }
@@ -37,14 +39,17 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
-        if (!snapshot.hasData || snapshot.data == null) {
+
+        if (!snapshot.hasData) {
           return const LoginScreen();
         }
+
         return WeekPlanScreen(uid: snapshot.data!.uid);
       },
     );
   }
 }
-
