@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/age_class.dart';
 import '../models/week_plan.dart';
 import '../services/plan_engine.dart';
-import 'import_screen.dart';
 
 class WeekPlanScreen extends StatefulWidget {
   final String uid;
@@ -42,15 +41,6 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
         title: const Text("Wochenplan"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.upload_file),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ImportScreen(uid: widget.uid)),
-              );
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => FirebaseAuth.instance.signOut(),
           ),
@@ -74,9 +64,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final tournaments = (tSnap.data?.docs ?? [])
-                  .map((d) => d.data())
-                  .toList();
+              final tournaments =
+                  (tSnap.data?.docs ?? []).map((d) => d.data()).toList();
 
               final weeks = PlanEngine.buildWeeks(
                 ageClass: _age,
@@ -94,10 +83,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                         DropdownButton<AgeClass>(
                           value: _age,
                           items: AgeClass.values
-                              .map((a) => DropdownMenuItem(
-                                    value: a,
-                                    child: Text(ageClassLabel(a)),
-                                  ))
+                              .map(
+                                (a) => DropdownMenuItem(
+                                  value: a,
+                                  child: Text(ageClassLabel(a)),
+                                ),
+                              )
                               .toList(),
                           onChanged: (v) {
                             if (v == null) return;
@@ -116,11 +107,14 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                   Expanded(
                     child: ListView.separated(
                       itemCount: weeks.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1),
                       itemBuilder: (context, i) {
                         final w = weeks[i];
                         return ListTile(
-                          title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
+                          title: Text(
+                            "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
+                          ),
                           subtitle: Text(
                             "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
                             "Empfehlung: ${w.recommendations.join(' • ')}"
