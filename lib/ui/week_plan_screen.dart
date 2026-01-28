@@ -24,16 +24,20 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     return DateTime(y, 10, 1);
   }
 
-  Color _ampelBackground(Ampel a) {
-    switch (a) {
-      case Ampel.gruen:
-        return Colors.green.withOpacity(0.08);
-      case Ampel.gelb:
-        return Colors.orange.withOpacity(0.08);
-      case Ampel.rot:
-        return Colors.red.withOpacity(0.08);
-    }
+Color _weekBackground(Ampel a, bool trainingFree) {
+  if (trainingFree) {
+    return Colors.grey.withOpacity(0.15);
   }
+  switch (a) {
+    case Ampel.gruen:
+      return Colors.green.withOpacity(0.08);
+    case Ampel.gelb:
+      return Colors.orange.withOpacity(0.08);
+    case Ampel.rot:
+      return Colors.red.withOpacity(0.08);
+  }
+}
+
 
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
