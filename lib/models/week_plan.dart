@@ -17,14 +17,16 @@ class WeekPlan {
   final AgeClass ageClass;
   final DateTime weekStart; // Montag
   final int isoWeek;
+
   final Ampel ampel;
 
-  /// Anzahl empfohlener Trainingstage
+  // Anzahl empfohlener Trainingseinheiten in der Woche
   final int recommendedSessions;
 
-  /// Tagesempfehlungen Mo–So (null = kein Training)
-  final List<String?> dayRecommendations;
+  // Wird in week_plan_screen.dart verwendet
+  final List<String> recommendations;
 
+  // Turniere in dieser Woche (Namen)
   final List<String> tournamentNames;
 
   const WeekPlan({
@@ -33,7 +35,7 @@ class WeekPlan {
     required this.isoWeek,
     required this.ampel,
     required this.recommendedSessions,
-    required this.dayRecommendations,
+    required this.recommendations,
     required this.tournamentNames,
-  }) : assert(dayRecommendations.length == 7);
+  });
 }
