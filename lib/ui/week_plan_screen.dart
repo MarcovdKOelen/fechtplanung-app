@@ -24,20 +24,17 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     return DateTime(y, 10, 1);
   }
 
-Color _weekBackground(Ampel a, bool trainingFree) {
-  if (trainingFree) {
-    return Colors.grey.withOpacity(0.15);
+  Color _weekBackground(Ampel a, bool trainingFree) {
+    if (trainingFree) return Colors.grey.withOpacity(0.15);
+    switch (a) {
+      case Ampel.gruen:
+        return Colors.green.withOpacity(0.08);
+      case Ampel.gelb:
+        return Colors.orange.withOpacity(0.08);
+      case Ampel.rot:
+        return Colors.red.withOpacity(0.08);
+    }
   }
-  switch (a) {
-    case Ampel.gruen:
-      return Colors.green.withOpacity(0.08);
-    case Ampel.gelb:
-      return Colors.orange.withOpacity(0.08);
-    case Ampel.rot:
-      return Colors.red.withOpacity(0.08);
-  }
-}
-
 
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -82,16 +79,6 @@ Color _weekBackground(Ampel a, bool trainingFree) {
     );
   }
 
-  String _dayRecSummary(WeekPlan w) {
-    final items = <String>[];
-    for (int i = 0; i < w.dayRecommendations.length; i++) {
-      final r = w.dayRecommendations[i];
-      if (r != null && r.trim().isNotEmpty) items.add(r.trim());
-      if (items.length >= 4) break;
-    }
-    return items.isEmpty ? "-" : items.join(" • ");
-  }
-
   void _openArchive(List<WeekPlan> pastWeeks) {
     showModalBottomSheet(
       context: context,
@@ -129,29 +116,45 @@ Color _weekBackground(Ampel a, bool trainingFree) {
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, i) {
                             final w = pastWeeks[i];
-                            return Container(
-                              color: _ampelBackground(w.ampel),
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              child: ListTile(
-                                title: Text(
-                                  "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
-                                ),
-                                subtitle: Text(
-                                  "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                  "Tages-Empfehlungen: ${_dayRecSummary(w)}"
-                                  "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
-                                ),
-                                trailing: Text(ampelLabel(w.ampel)),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                            final weekId = w.weekStart.toIso8601String().substring(0, 10);
+
+                            final weekDocStream = FirebaseFirestore.instance
+                                .collection("users")
+                                .doc(widget.uid)
+                                .collection("weeks")
+                                .doc(weekId)
+                                .snapshots();
+
+                            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                              stream: weekDocStream,
+                              builder: (context, snap) {
+                                final trainingFree = snap.data?.data()?["trainingFree"] == true;
+
+                                return Container(
+                                  color: _weekBackground(w.ampel, trainingFree),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  child: ListTile(
+                                    title: Text("KW ${w.isoWeek} • $weekId"),
+                                    subtitle: Text(
+                                      trainingFree
+                                          ? "Trainingsfrei"
+                                          : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
+                                            "Empfehlung: ${w.recommendations.join(' • ')}"
+                                            "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                     ),
-                                  );
-                                },
-                              ),
+                                    trailing: trainingFree ? const Icon(Icons.hotel_outlined) : Text(ampelLabel(w.ampel)),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -290,28 +293,46 @@ Color _weekBackground(Ampel a, bool trainingFree) {
                             separatorBuilder: (_, __) => const Divider(height: 1),
                             itemBuilder: (context, i) {
                               final w = visible[i];
-                              return Container(
-                                color: _ampelBackground(w.ampel),
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                child: ListTile(
-                                  title: Text(
-                                    "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
-                                  ),
-                                  subtitle: Text(
-                                    "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                    "Tages-Empfehlungen: ${_dayRecSummary(w)}"
-                                    "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
-                                  ),
-                                  trailing: Text(ampelLabel(w.ampel)),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                              final weekId = w.weekStart.toIso8601String().substring(0, 10);
+
+                              final weekDocStream = FirebaseFirestore.instance
+                                  .collection("users")
+                                  .doc(widget.uid)
+                                  .collection("weeks")
+                                  .doc(weekId)
+                                  .snapshots();
+
+                              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                                stream: weekDocStream,
+                                builder: (context, snap) {
+                                  final trainingFree = snap.data?.data()?["trainingFree"] == true;
+
+                                  return Container(
+                                    color: _weekBackground(w.ampel, trainingFree),
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    child: ListTile(
+                                      title: Text("KW ${w.isoWeek} • $weekId"),
+                                      subtitle: Text(
+                                        trainingFree
+                                            ? "Trainingsfrei"
+                                            : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
+                                              "Empfehlung: ${w.recommendations.join(' • ')}"
+                                              "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                       ),
-                                    );
-                                  },
-                                ),
+                                      trailing: trainingFree
+                                          ? const Icon(Icons.hotel_outlined)
+                                          : Text(ampelLabel(w.ampel)),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  );
+                                },
                               );
                             },
                           ),
@@ -325,3 +346,4 @@ Color _weekBackground(Ampel a, bool trainingFree) {
     );
   }
 }
+
