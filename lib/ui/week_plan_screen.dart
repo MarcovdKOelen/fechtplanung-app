@@ -44,9 +44,13 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
   }
 
   bool _isPastWeek(WeekPlan w, DateTime now) {
-    final start = _dateOnly(w.weekStart);
-    final n = _dateOnly(now);
-    return start.isBefore(PlanEngine.toMonday(n));
+    final nMon = PlanEngine.toMonday(_dateOnly(now));
+    return _dateOnly(w.weekStart).isBefore(nMon);
+  }
+
+  bool _isOlderThanOneYear(WeekPlan w, DateTime now) {
+    final cutoff = DateTime(now.year - 1, now.month, now.day); // 12 Monate zurück
+    return _dateOnly(w.weekStart).isBefore(_dateOnly(cutoff));
   }
 
   void _openArchive(List<WeekPlan> pastWeeks) {
@@ -64,7 +68,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                   child: Row(
                     children: [
                       const Text(
-                        "Archiv",
+                        "Archiv (letzte 12 Monate)",
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                       const Spacer(),
@@ -80,7 +84,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                 const Divider(height: 1),
                 Expanded(
                   child: pastWeeks.isEmpty
-                      ? const Center(child: Text("Keine vergangenen Wochen im Archiv."))
+                      ? const Center(child: Text("Keine Wochen im Archiv (letzte 12 Monate)."))
                       : ListView.separated(
                           itemCount: pastWeeks.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
@@ -129,12 +133,9 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
       appBar: AppBar(
         title: const Text("Wochenplan"),
         actions: [
-          // Archiv-Button (öffnet vergangene Wochen)
           IconButton(
             icon: const Icon(Icons.archive_outlined),
-            onPressed: () {
-              // wird im build unten mit echten Daten befüllt
-            },
+            onPressed: () {},
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -179,15 +180,15 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                 if (_isCurrentWeek(w, now)) {
                   current = w;
                 } else if (_isPastWeek(w, now)) {
-                  past.add(w);
+                  if (!_isOlderThanOneYear(w, now)) {
+                    past.add(w);
+                  }
                 } else {
                   future.add(w);
                 }
               }
 
-              // Archiv: neueste zuerst
               past.sort((a, b) => b.weekStart.compareTo(a.weekStart));
-              // Zukunft: chronologisch
               future.sort((a, b) => a.weekStart.compareTo(b.weekStart));
 
               final visible = <WeekPlan>[
@@ -195,7 +196,6 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                 ...future,
               ];
 
-              // AppBar Archiv-Button mit echter Aktion (ohne extra Datei)
               final appBar = AppBar(
                 title: const Text("Wochenplan"),
                 actions: [
@@ -275,6 +275,4 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
       ),
     );
   }
-}
-
 }
