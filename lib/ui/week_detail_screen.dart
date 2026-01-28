@@ -20,24 +20,18 @@ class WeekDetailScreen extends StatelessWidget {
     return days[i];
   }
 
-  Map<int, String> _buildDayRecommendationMap({
-    required List<int> trainingDaysSorted,
-    required bool trainingFree,
-  }) {
-    if (trainingFree) return {};
+  /// Liefert GENAU 4 Empfehlungen für einen Trainingstag.
+  /// Nutzt week.recommendations als Pool und rotiert, damit sich die Tage unterscheiden.
+  List<String> _fourRecsForDay(int dayOrderIndex) {
+    final pool = week.recommendations;
+    if (pool.isEmpty) return const ["Training", "Training", "Training", "Training"];
 
-    final result = <int, String>{};
-    if (trainingDaysSorted.isEmpty) return result;
-
-    final maxSessions = week.recommendedSessions.clamp(0, 7);
-    final count = maxSessions.clamp(0, trainingDaysSorted.length);
-
-    for (int i = 0; i < count; i++) {
-      final dayIndex = trainingDaysSorted[i];
-      final label = (i < week.recommendations.length) ? week.recommendations[i] : "Training";
-      result[dayIndex] = label;
+    final out = <String>[];
+    for (int k = 0; k < 4; k++) {
+      final idx = (dayOrderIndex * 4 + k) % pool.length;
+      out.add(pool[idx]);
     }
-    return result;
+    return out;
   }
 
   @override
@@ -81,11 +75,6 @@ class WeekDetailScreen extends StatelessWidget {
           );
         }
 
-        final dayRecMap = _buildDayRecommendationMap(
-          trainingDaysSorted: trainingDays,
-          trainingFree: trainingFree,
-        );
-
         return Scaffold(
           appBar: AppBar(
             title: Text("KW ${week.isoWeek} • Details"),
@@ -93,7 +82,6 @@ class WeekDetailScreen extends StatelessWidget {
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Trainingsfrei
               SwitchListTile(
                 title: const Text("Diese Woche trainingsfrei"),
                 value: trainingFree,
@@ -107,7 +95,6 @@ class WeekDetailScreen extends StatelessWidget {
               ),
               const Divider(),
 
-              // Trainingstage auswählen
               const Text(
                 "Trainingstage",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -139,9 +126,8 @@ class WeekDetailScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Tages-Empfehlungen anzeigen (nach Auswahl)
               const Text(
-                "Empfohlene Einheiten pro Tag",
+                "Empfohlene Einheiten pro Tag (je 4)",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
@@ -167,21 +153,11 @@ class WeekDetailScreen extends StatelessWidget {
                   child: Column(
                     children: List.generate(7, (i) {
                       final isTrainingDay = selectedSet.contains(i);
-                      final rec = dayRecMap[i];
+                      final dateStr = _d(week.weekStart.add(Duration(days: i)));
 
-                      String subtitle;
-                      IconData? trailingIcon;
-
-                      if (!isTrainingDay) {
-                        subtitle = "Kein Trainingstag";
-                        trailingIcon = null;
-                      } else if (rec == null) {
-                        subtitle = "Training (ohne Empfehlung)";
-                        trailingIcon = Icons.fitness_center;
-                      } else {
-                        subtitle = rec;
-                        trailingIcon = Icons.fitness_center;
-                      }
+                      // dayOrderIndex = Position innerhalb der ausgewählten Trainingstage (0..)
+                      final dayOrderIndex = trainingDays.indexOf(i);
+                      final recs = isTrainingDay ? _fourRecsForDay(dayOrderIndex) : const <String>[];
 
                       return Column(
                         children: [
@@ -196,9 +172,16 @@ class WeekDetailScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            title: Text(_d(week.weekStart.add(Duration(days: i)))),
-                            subtitle: Text(subtitle),
-                            trailing: trailingIcon == null ? null : Icon(trailingIcon),
+                            title: Text(dateStr),
+                            subtitle: isTrainingDay
+                                ? Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      for (final r in recs) Text("• $r"),
+                                    ],
+                                  )
+                                : const Text("Kein Trainingstag"),
+                            trailing: isTrainingDay ? const Icon(Icons.fitness_center) : null,
                           ),
                           if (i != 6) const Divider(height: 1),
                         ],
@@ -209,7 +192,6 @@ class WeekDetailScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Optional: Wochen-Empfehlungs-Liste (wie bisher) – bleibt als Referenz drin
               const Text(
                 "Empfehlungen (Woche)",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -229,7 +211,6 @@ class WeekDetailScreen extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // Turniere
               const Text(
                 "Turniere",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
