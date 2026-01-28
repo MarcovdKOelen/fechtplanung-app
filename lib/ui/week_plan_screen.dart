@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/age_class.dart';
 import '../models/week_plan.dart';
 import '../services/plan_engine.dart';
+import 'week_detail_screen.dart';
 
 class WeekPlanScreen extends StatefulWidget {
   final String uid;
@@ -49,7 +50,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
   }
 
   bool _isOlderThanOneYear(WeekPlan w, DateTime now) {
-    final cutoff = DateTime(now.year - 1, now.month, now.day); // 12 Monate zurück
+    final cutoff = DateTime(now.year - 1, now.month, now.day);
     return _dateOnly(w.weekStart).isBefore(_dateOnly(cutoff));
   }
 
@@ -94,15 +95,20 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                               color: _ampelBackground(w.ampel),
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                               child: ListTile(
-                                title: Text(
-                                  "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
-                                ),
+                                title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
                                 subtitle: Text(
                                   "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
                                   "Empfehlung: ${w.recommendations.join(' • ')}"
                                   "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                 ),
                                 trailing: Text(ampelLabel(w.ampel)),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => WeekDetailScreen(week: w)),
+                                  );
+                                },
                               ),
                             );
                           },
@@ -129,74 +135,59 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
         .doc(widget.uid)
         .collection("tournaments");
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Wochenplan"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.archive_outlined),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => FirebaseAuth.instance.signOut(),
-          ),
-        ],
-      ),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: settingsRef.snapshots(),
-        builder: (context, settingsSnap) {
-          DateTime seasonStart = _defaultSeasonStart();
-          if (settingsSnap.hasData && settingsSnap.data!.exists) {
-            final s = settingsSnap.data!.data()?["seasonStart"]?.toString();
-            if (s != null && s.isNotEmpty) {
-              seasonStart = DateTime.parse(s);
-            }
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: settingsRef.snapshots(),
+      builder: (context, settingsSnap) {
+        DateTime seasonStart = _defaultSeasonStart();
+        if (settingsSnap.hasData && settingsSnap.data!.exists) {
+          final s = settingsSnap.data!.data()?["seasonStart"]?.toString();
+          if (s != null && s.isNotEmpty) {
+            seasonStart = DateTime.parse(s);
           }
+        }
 
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: tournamentsRef.snapshots(),
-            builder: (context, tSnap) {
-              if (tSnap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: tournamentsRef.snapshots(),
+          builder: (context, tSnap) {
+            if (tSnap.connectionState == ConnectionState.waiting) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+
+            final tournaments = (tSnap.data?.docs ?? []).map((d) => d.data()).toList();
+
+            final weeks = PlanEngine.buildWeeks(
+              ageClass: _age,
+              seasonStart: seasonStart,
+              numberOfWeeks: 52,
+              tournaments: tournaments,
+            );
+
+            final now = DateTime.now();
+
+            final past = <WeekPlan>[];
+            final future = <WeekPlan>[];
+            WeekPlan? current;
+
+            for (final w in weeks) {
+              if (_isCurrentWeek(w, now)) {
+                current = w;
+              } else if (_isPastWeek(w, now)) {
+                if (!_isOlderThanOneYear(w, now)) past.add(w);
+              } else {
+                future.add(w);
               }
+            }
 
-              final tournaments = (tSnap.data?.docs ?? []).map((d) => d.data()).toList();
+            past.sort((a, b) => b.weekStart.compareTo(a.weekStart));
+            future.sort((a, b) => a.weekStart.compareTo(b.weekStart));
 
-              final weeks = PlanEngine.buildWeeks(
-                ageClass: _age,
-                seasonStart: seasonStart,
-                numberOfWeeks: 52,
-                tournaments: tournaments,
-              );
+            final visible = <WeekPlan>[
+              if (current != null) current!,
+              ...future,
+            ];
 
-              final now = DateTime.now();
-
-              final past = <WeekPlan>[];
-              final future = <WeekPlan>[];
-              WeekPlan? current;
-
-              for (final w in weeks) {
-                if (_isCurrentWeek(w, now)) {
-                  current = w;
-                } else if (_isPastWeek(w, now)) {
-                  if (!_isOlderThanOneYear(w, now)) {
-                    past.add(w);
-                  }
-                } else {
-                  future.add(w);
-                }
-              }
-
-              past.sort((a, b) => b.weekStart.compareTo(a.weekStart));
-              future.sort((a, b) => a.weekStart.compareTo(b.weekStart));
-
-              final visible = <WeekPlan>[
-                if (current != null) current!,
-                ...future,
-              ];
-
-              final appBar = AppBar(
+            return Scaffold(
+              appBar: AppBar(
                 title: const Text("Wochenplan"),
                 actions: [
                   IconButton(
@@ -208,71 +199,73 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                     onPressed: () => FirebaseAuth.instance.signOut(),
                   ),
                 ],
-              );
-
-              return Scaffold(
-                appBar: appBar,
-                body: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          DropdownButton<AgeClass>(
-                            value: _age,
-                            items: AgeClass.values
-                                .map((a) => DropdownMenuItem(
-                                      value: a,
-                                      child: Text(ageClassLabel(a)),
-                                    ))
-                                .toList(),
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() => _age = v);
+              ),
+              body: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        DropdownButton<AgeClass>(
+                          value: _age,
+                          items: AgeClass.values
+                              .map((a) => DropdownMenuItem(
+                                    value: a,
+                                    child: Text(ageClassLabel(a)),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() => _age = v);
+                          },
+                        ),
+                        const Spacer(),
+                        Text(
+                          "Saisonstart: ${seasonStart.toIso8601String().substring(0, 10)}",
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: visible.isEmpty
+                        ? const Center(child: Text("Keine Wochen verfügbar."))
+                        : ListView.separated(
+                            itemCount: visible.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, i) {
+                              final w = visible[i];
+                              return Container(
+                                color: _ampelBackground(w.ampel),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                child: ListTile(
+                                  title: Text(
+                                    "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
+                                  ),
+                                  subtitle: Text(
+                                    "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
+                                    "Empfehlung: ${w.recommendations.join(' • ')}"
+                                    "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                                  ),
+                                  trailing: Text(ampelLabel(w.ampel)),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => WeekDetailScreen(week: w)),
+                                    );
+                                  },
+                                ),
+                              );
                             },
                           ),
-                          const Spacer(),
-                          Text(
-                            "Saisonstart: ${seasonStart.toIso8601String().substring(0, 10)}",
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: visible.isEmpty
-                          ? const Center(child: Text("Keine Wochen verfügbar."))
-                          : ListView.separated(
-                              itemCount: visible.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, i) {
-                                final w = visible[i];
-                                return Container(
-                                  color: _ampelBackground(w.ampel),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                  child: ListTile(
-                                    title: Text(
-                                      "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
-                                    ),
-                                    subtitle: Text(
-                                      "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                      "Empfehlung: ${w.recommendations.join(' • ')}"
-                                      "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
-                                    ),
-                                    trailing: Text(ampelLabel(w.ampel)),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
