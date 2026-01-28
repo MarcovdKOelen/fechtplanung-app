@@ -42,9 +42,9 @@ class AuthGate extends StatelessWidget {
         if (!snapshot.hasData || snapshot.data == null) {
           return const LoginScreen();
         }
-        final user = snapshot.data!;
-        return WeekPlanScreen(uid: user.uid);
+        return WeekPlanScreen(uid: snapshot.data!.uid);
       },
     );
   }
 }
+
