@@ -1,3 +1,5 @@
+// lib/ui/week_detail_screen.dart
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,7 +27,7 @@ class WeekDetailScreen extends StatelessWidget {
 
   bool _isMobility(String s) {
     final t = s.trim().toLowerCase();
-    return t.startsWith("mobilität");
+    return t.startsWith("mobilität"); // akzeptiert: Mobilität, Mobilitätstraining, ...
   }
 
   bool _isStretchStab(String s) => s.trim().toLowerCase() == "dehnung/stabilität";
@@ -39,11 +41,11 @@ class WeekDetailScreen extends StatelessWidget {
     return hash;
   }
 
-  /// Regeln:
+  /// Basierend auf Regeln:
   /// 1) Aufwärmung immer zuerst
-  /// 2) Mobilität ODER Dehnung/Stabilität genau 1x (zufällig)
-  /// 3) Rest zufällig, aber ohne Aufwärmung / Mobilität / Dehnung
-  List<String> _fourRecsForDay(int dayIndex) {
+  /// 2) Mobilität ODER Dehnung/Stabilität genau 1x (zufällig, stabil)
+  /// 3) Rest zufällig, aber ohne Aufwärmung/Mobilität/Dehnung
+  List<String> _baseFourRecsForDay(int dayIndex) {
     final rng = Random(_stableSeedForDay(week.weekStart, dayIndex));
     final pool = week.recommendations;
 
@@ -88,6 +90,137 @@ class WeekDetailScreen extends StatelessWidget {
     return out.take(4).toList();
   }
 
+  List<String> _allowedOptionsForSlot(int slotIndex) {
+    final pool = week.recommendations;
+
+    // Slot 0: Aufwärmung fix
+    if (slotIndex == 0) return const ["Aufwärmung"];
+
+    // Slot 1: nur Mobilität* oder Dehnung/Stabilität
+    if (slotIndex == 1) {
+      final opts = <String>[];
+      opts.addAll(pool.where(_isMobility));
+      opts.addAll(pool.where(_isStretchStab));
+      // Dedupe
+      final dedup = opts.toSet().toList()..sort();
+      return dedup;
+    }
+
+    // Slot 2-3: alles außer Aufwärmung/Mobilität/Dehnung
+    final opts = pool.where((e) {
+      if (_isWarmup(e)) return false;
+      if (_isMobility(e)) return false;
+      if (_isStretchStab(e)) return false;
+      return true;
+    }).toSet().toList()
+      ..sort();
+
+    return opts;
+  }
+
+  List<String> _applyOverrideIfAny({
+    required int dayIndex,
+    required Map<String, dynamic> dayOverrides,
+    required List<String> base,
+  }) {
+    final key = dayIndex.toString();
+    final raw = dayOverrides[key];
+
+    if (raw is! List) return base;
+
+    final overridden = raw.map((e) => e.toString()).toList();
+    if (overridden.length != 4) return base;
+
+    // Validierung pro Slot (damit Regeln nicht kaputtgehen)
+    for (int i = 0; i < 4; i++) {
+      final allowed = _allowedOptionsForSlot(i);
+      if (allowed.isEmpty) continue; // falls z.B. keine Mobilität/Dehnung im Pool
+      if (!allowed.contains(overridden[i])) return base;
+    }
+
+    // Slot0 muss Aufwärmung bleiben
+    if (overridden[0] != "Aufwärmung") return base;
+
+    return overridden;
+  }
+
+  Future<void> _pickReplacement({
+    required BuildContext context,
+    required DocumentReference<Map<String, dynamic>> weekRef,
+    required int dayIndex,
+    required int slotIndex,
+    required List<String> currentDayList,
+    required Map<String, dynamic> dayOverrides,
+  }) async {
+    final options = _allowedOptionsForSlot(slotIndex);
+
+    // Slot 0: nicht editierbar
+    if (slotIndex == 0) return;
+
+    if (options.isEmpty) {
+      // z.B. Mobilität/Dehnung existiert nicht im Pool -> nichts auswählbar
+      return;
+    }
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.75,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Auswahl: ${_weekdayLabel(dayIndex)} • Slot ${slotIndex + 1}",
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: options.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, i) {
+                        final opt = options[i];
+                        return ListTile(
+                          title: Text(opt),
+                          onTap: () => Navigator.pop(context, opt),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected == null) return;
+
+    // Update overrides map (pro Tag)
+    final nextDay = List<String>.from(currentDayList);
+    nextDay[slotIndex] = selected;
+
+    // Optional: Duplikate innerhalb eines Tages minimieren (Slots 2/3)
+    // Wenn Slot 2/3 doppelt wird, lassen wir es trotzdem zu (Trainer entscheidet).
+
+    final nextOverrides = Map<String, dynamic>.from(dayOverrides);
+    nextOverrides[dayIndex.toString()] = nextDay;
+
+    await weekRef.set(
+      {
+        "dayOverrides": nextOverrides,
+      },
+      SetOptions(merge: true),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final weekId = _d(week.weekStart);
@@ -113,6 +246,10 @@ class WeekDetailScreen extends StatelessWidget {
 
         final selected = trainingDays.toSet();
 
+        final dayOverrides = (data["dayOverrides"] is Map)
+            ? Map<String, dynamic>.from(data["dayOverrides"] as Map)
+            : <String, dynamic>{};
+
         Future<void> save({bool? tf, List<int>? td}) async {
           await weekRef.set(
             {
@@ -135,8 +272,10 @@ class WeekDetailScreen extends StatelessWidget {
               ),
               const Divider(),
 
-              const Text("Trainingstage",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              const Text(
+                "Trainingstage",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -180,9 +319,16 @@ class WeekDetailScreen extends StatelessWidget {
               else
                 Card(
                   child: Column(
-                    children: List.generate(7, (i) {
-                      final isDay = selected.contains(i);
-                      final recs = isDay ? _fourRecsForDay(i) : const <String>[];
+                    children: List.generate(7, (dayIndex) {
+                      final isDay = selected.contains(dayIndex);
+                      final dateStr = _d(week.weekStart.add(Duration(days: dayIndex)));
+
+                      final base = _baseFourRecsForDay(dayIndex);
+                      final recs = _applyOverrideIfAny(
+                        dayIndex: dayIndex,
+                        dayOverrides: dayOverrides,
+                        base: base,
+                      );
 
                       return Column(
                         children: [
@@ -190,19 +336,45 @@ class WeekDetailScreen extends StatelessWidget {
                             dense: true,
                             leading: SizedBox(
                               width: 40,
-                              child: Center(child: Text(_weekdayLabel(i))),
+                              child: Center(
+                                child: Text(
+                                  _weekdayLabel(dayIndex),
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
                             ),
-                            title: Text(_d(week.weekStart.add(Duration(days: i)))),
-                            subtitle: isDay
-                                ? Column(
+                            title: Text(dateStr),
+                            subtitle: !isDay
+                                ? const Text("Kein Trainingstag")
+                                : Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      for (final r in recs) Text("• $r"),
+                                      for (int s = 0; s < 4; s++)
+                                        InkWell(
+                                          onTap: () => _pickReplacement(
+                                            context: context,
+                                            weekRef: weekRef,
+                                            dayIndex: dayIndex,
+                                            slotIndex: s,
+                                            currentDayList: recs,
+                                            dayOverrides: dayOverrides,
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 2),
+                                            child: Text(
+                                              "• ${recs[s]}",
+                                              style: TextStyle(
+                                                decoration: (s == 0)
+                                                    ? TextDecoration.none
+                                                    : TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                     ],
-                                  )
-                                : const Text("Kein Trainingstag"),
+                                  ),
                           ),
-                          if (i != 6) const Divider(height: 1),
+                          if (dayIndex != 6) const Divider(height: 1),
                         ],
                       );
                     }),
