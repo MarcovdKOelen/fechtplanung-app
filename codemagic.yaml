@@ -5,14 +5,13 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Flutter doctor
+      - name: Clean + recreate Android (v2 embedding) WITHOUT touching lib/
         script: |
-          flutter doctor -v
-
+          rm -rf android
+          flutter create --platforms=android .
       - name: Get dependencies
         script: |
           flutter pub get
-
       - name: Build debug APK
         script: |
           flutter build apk --debug
