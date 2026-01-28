@@ -119,7 +119,9 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                               color: _ampelBackground(w.ampel),
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                               child: ListTile(
-                                title: Text("KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}"),
+                                title: Text(
+                                  "KW ${w.isoWeek} • ${w.weekStart.toIso8601String().substring(0, 10)}",
+                                ),
                                 subtitle: Text(
                                   "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
                                   "Empfehlung: ${w.recommendations.join(' • ')}"
@@ -164,12 +166,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: settingsRef.snapshots(),
       builder: (context, settingsSnap) {
+        final settings = settingsSnap.data?.data() ?? <String, dynamic>{};
+
         DateTime seasonStart = _defaultSeasonStart();
-        if (settingsSnap.hasData && settingsSnap.data!.exists) {
-          final s = settingsSnap.data!.data()?["seasonStart"]?.toString();
-          if (s != null && s.isNotEmpty) {
-            seasonStart = DateTime.parse(s);
-          }
+        final s = settings["seasonStart"]?.toString();
+        if (s != null && s.isNotEmpty) {
+          seasonStart = DateTime.parse(s);
         }
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -186,6 +188,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
               seasonStart: seasonStart,
               numberOfWeeks: 52,
               tournaments: tournaments,
+              settings: settings,
             );
 
             final now = DateTime.now();
@@ -204,8 +207,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
               }
             }
 
-            past.sort((a, b) => b.weekStart.compareTo(a.weekStart));
-            future.sort((a, b) => a.weekStart.compareTo(b.weekStart));
+            past.sort((a, b) => b.weekStart.compareTo(a.weekStart)); // neueste zuerst
+            future.sort((a, b) => a.weekStart.compareTo(b.weekStart)); // chronologisch
 
             final visible = <WeekPlan>[
               if (current != null) current!,
@@ -235,10 +238,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                         DropdownButton<AgeClass>(
                           value: _age,
                           items: AgeClass.values
-                              .map((a) => DropdownMenuItem(
-                                    value: a,
-                                    child: Text(ageClassLabel(a)),
-                                  ))
+                              .map(
+                                (a) => DropdownMenuItem(
+                                  value: a,
+                                  child: Text(ageClassLabel(a)),
+                                ),
+                              )
                               .toList(),
                           onChanged: (v) {
                             if (v == null) return;
