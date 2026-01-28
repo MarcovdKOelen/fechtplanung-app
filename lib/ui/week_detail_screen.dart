@@ -20,6 +20,26 @@ class WeekDetailScreen extends StatelessWidget {
     return days[i];
   }
 
+  Map<int, String> _buildDayRecommendationMap({
+    required List<int> trainingDaysSorted,
+    required bool trainingFree,
+  }) {
+    if (trainingFree) return {};
+
+    final result = <int, String>{};
+    if (trainingDaysSorted.isEmpty) return result;
+
+    final maxSessions = week.recommendedSessions.clamp(0, 7);
+    final count = maxSessions.clamp(0, trainingDaysSorted.length);
+
+    for (int i = 0; i < count; i++) {
+      final dayIndex = trainingDaysSorted[i];
+      final label = (i < week.recommendations.length) ? week.recommendations[i] : "Training";
+      result[dayIndex] = label;
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final weekId = _d(week.weekStart);
@@ -34,21 +54,37 @@ class WeekDetailScreen extends StatelessWidget {
       stream: weekRef.snapshots(),
       builder: (context, snap) {
         final data = snap.data?.data() ?? {};
-        bool trainingFree = data["trainingFree"] == true;
-        final days = (data["trainingDays"] as List? ?? [])
+        final trainingFree = data["trainingFree"] == true;
+
+        final trainingDays = (data["trainingDays"] as List? ?? [])
             .map((e) => int.tryParse(e.toString()) ?? -1)
             .where((i) => i >= 0 && i <= 6)
-            .toSet();
+            .toSet()
+            .toList()
+          ..sort();
 
-        Future<void> save() async {
+        final selectedSet = trainingDays.toSet();
+
+        Future<void> save({
+          bool? trainingFreeNew,
+          List<int>? trainingDaysNew,
+        }) async {
+          final tf = trainingFreeNew ?? trainingFree;
+          final td = (trainingDaysNew ?? trainingDays)..sort();
+
           await weekRef.set(
             {
-              "trainingFree": trainingFree,
-              "trainingDays": trainingFree ? [] : days.toList()..sort(),
+              "trainingFree": tf,
+              "trainingDays": tf ? [] : td,
             },
             SetOptions(merge: true),
           );
         }
+
+        final dayRecMap = _buildDayRecommendationMap(
+          trainingDaysSorted: trainingDays,
+          trainingFree: trainingFree,
+        );
 
         return Scaffold(
           appBar: AppBar(
@@ -57,51 +93,164 @@ class WeekDetailScreen extends StatelessWidget {
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // Trainingsfrei
               SwitchListTile(
                 title: const Text("Diese Woche trainingsfrei"),
                 value: trainingFree,
                 onChanged: (v) async {
-                  trainingFree = v;
-                  if (v) days.clear();
-                  await save();
+                  if (v) {
+                    await save(trainingFreeNew: true, trainingDaysNew: const []);
+                  } else {
+                    await save(trainingFreeNew: false);
+                  }
                 },
               ),
               const Divider(),
 
+              // Trainingstage auswählen
               const Text(
                 "Trainingstage",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: List.generate(7, (i) {
-                  final selected = days.contains(i);
+                  final selected = selectedSet.contains(i);
                   return FilterChip(
                     label: Text(_weekdayLabel(i)),
                     selected: selected,
                     onSelected: trainingFree
                         ? null
                         : (v) async {
+                            final next = selectedSet.toSet();
                             if (v) {
-                              days.add(i);
+                              next.add(i);
                             } else {
-                              days.remove(i);
+                              next.remove(i);
                             }
-                            await save();
+                            final nextList = next.toList()..sort();
+                            await save(trainingDaysNew: nextList);
                           },
                   );
                 }),
               ),
 
-              const SizedBox(height: 24),
-              Text(
-                trainingFree
-                    ? "Diese Woche ist vollständig trainingsfrei."
-                    : "Ausgewählte Trainingstage: ${days.map(_weekdayLabel).join(", ")}",
+              const SizedBox(height: 16),
+
+              // Tages-Empfehlungen anzeigen (nach Auswahl)
+              const Text(
+                "Empfohlene Einheiten pro Tag",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
+              const SizedBox(height: 8),
+
+              if (trainingFree)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.hotel_outlined),
+                    title: Text("Trainingsfrei"),
+                    subtitle: Text("In dieser Woche werden keine Einheiten empfohlen."),
+                  ),
+                )
+              else if (trainingDays.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.info_outline),
+                    title: Text("Keine Trainingstage ausgewählt"),
+                    subtitle: Text("Wähle oben Trainingstage aus, dann erscheinen hier die Empfehlungen pro Tag."),
+                  ),
+                )
+              else
+                Card(
+                  child: Column(
+                    children: List.generate(7, (i) {
+                      final isTrainingDay = selectedSet.contains(i);
+                      final rec = dayRecMap[i];
+
+                      String subtitle;
+                      IconData? trailingIcon;
+
+                      if (!isTrainingDay) {
+                        subtitle = "Kein Trainingstag";
+                        trailingIcon = null;
+                      } else if (rec == null) {
+                        subtitle = "Training (ohne Empfehlung)";
+                        trailingIcon = Icons.fitness_center;
+                      } else {
+                        subtitle = rec;
+                        trailingIcon = Icons.fitness_center;
+                      }
+
+                      return Column(
+                        children: [
+                          ListTile(
+                            dense: true,
+                            leading: SizedBox(
+                              width: 44,
+                              child: Center(
+                                child: Text(
+                                  _weekdayLabel(i),
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
+                            title: Text(_d(week.weekStart.add(Duration(days: i)))),
+                            subtitle: Text(subtitle),
+                            trailing: trailingIcon == null ? null : Icon(trailingIcon),
+                          ),
+                          if (i != 6) const Divider(height: 1),
+                        ],
+                      );
+                    }),
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              // Optional: Wochen-Empfehlungs-Liste (wie bisher) – bleibt als Referenz drin
+              const Text(
+                "Empfehlungen (Woche)",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              if (week.recommendations.isEmpty)
+                const Card(child: ListTile(title: Text("Keine Empfehlungen hinterlegt.")))
+              else
+                ...week.recommendations.map(
+                  (e) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.playlist_add_check),
+                      title: Text(e),
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              // Turniere
+              const Text(
+                "Turniere",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              if (week.tournamentNames.isEmpty)
+                const Card(
+                  child: ListTile(
+                    leading: Icon(Icons.emoji_events_outlined),
+                    title: Text("Keine Turniere in dieser Woche."),
+                  ),
+                )
+              else
+                ...week.tournamentNames.map(
+                  (t) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.emoji_events_outlined),
+                      title: Text(t),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
