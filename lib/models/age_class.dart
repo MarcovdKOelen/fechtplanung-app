@@ -12,12 +12,3 @@ String ageClassLabel(AgeClass a) {
       return "U20";
   }
 }
-
-AgeClass? parseAgeClass(String s) {
-  final t = s.trim().toUpperCase();
-  if (t.contains("U13")) return AgeClass.u13;
-  if (t.contains("U15")) return AgeClass.u15;
-  if (t.contains("U17")) return AgeClass.u17;
-  if (t.contains("U20")) return AgeClass.u20;
-  return null;
-}
