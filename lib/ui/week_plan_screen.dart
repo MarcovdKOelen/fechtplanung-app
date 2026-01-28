@@ -106,7 +106,9 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                   Navigator.pop(context);
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (_) => WeekDetailScreen(week: w)),
+                                    MaterialPageRoute(
+                                      builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                                    ),
                                   );
                                 },
                               ),
@@ -209,10 +211,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                         DropdownButton<AgeClass>(
                           value: _age,
                           items: AgeClass.values
-                              .map((a) => DropdownMenuItem(
-                                    value: a,
-                                    child: Text(ageClassLabel(a)),
-                                  ))
+                              .map(
+                                (a) => DropdownMenuItem(
+                                  value: a,
+                                  child: Text(ageClassLabel(a)),
+                                ),
+                              )
                               .toList(),
                           onChanged: (v) {
                             if (v == null) return;
@@ -252,7 +256,9 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                   onTap: () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (_) => WeekDetailScreen(week: w)),
+                                      MaterialPageRoute(
+                                        builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                                      ),
                                     );
                                   },
                                 ),
