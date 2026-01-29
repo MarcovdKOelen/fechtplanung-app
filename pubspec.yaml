@@ -10,14 +10,21 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Firebase
   firebase_core: ^3.0.0
   firebase_auth: ^5.0.0
   cloud_firestore: ^5.0.0
 
+  # Datei-Import (bleibt drin)
   file_picker: ^8.0.0
   csv: ^6.0.0
   excel: ^4.0.0
 
+  # PDF Export (NEU)
+  pdf: ^3.10.8
+  printing: ^5.12.0
+
+  # Optional (kann bleiben, stört nicht)
   share_plus: ^10.0.0
   path_provider: ^2.1.4
 
