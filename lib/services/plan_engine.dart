@@ -1,3 +1,5 @@
+// lib/services/plan_engine.dart
+
 import '../models/age_class.dart';
 import '../models/week_plan.dart';
 
@@ -22,43 +24,75 @@ class PlanEngine {
     return 1 + (diffDays ~/ 7);
   }
 
-  // === Trainingseinheiten je Ampel ===
-  // Neu: "Koordination", "Reaktion" (für Slot 2) + "Partnerübung" (für Slot 3/4) in allen 3 Ampeln
+  // Einheitensammlung je Ampel
   static const Map<Ampel, List<String>> defaultRecs = {
+    // GRÜN
     Ampel.gruen: [
       "Aufwärmung",
-      "Freie Athletik Auswahl",
-      "Beinarbeit Kondition",
-      "Technik/Taktik",
-      "15er Gefechte",
-      "Fechten mit Aufgabenstellung",
+
+      // Slot 2 Pool (wird in UI-Logik genutzt)
       "Mobilitätstraining",
       "Dehnung/Stabilität",
       "Koordination",
       "Reaktion",
+
+      // Slot 3 & 4 Pool
+      "Athletik Kraft", // umbenannt (Freie Athletik Auswahl)
+      "Beinarbeit Kondition",
+      "Beinarbeit Technik", // umbenannt (Technik/Taktik)
+      "15er Gefechte",
+      "Fechten mit Aufgabenstellung",
       "Partnerübung",
+
+      // neu
+      "Beinarbeit Taktik",
+      "Beinarbeit Ausdauer",
+      "Athletik Ausdauer",
+      "Athletik Schnelligkeit",
     ],
+
+    // GELB
     Ampel.gelb: [
       "Aufwärmung",
-      "Technik/Taktik",
-      "10er Gefechte",
-      "Athletik kurz",
+
+      // Slot 2 Pool
       "Mobilität",
       "Dehnung/Stabilität",
-      "Fechten mit Aufgabenstellung auf 5 Treffer",
       "Koordination",
       "Reaktion",
+
+      // Slot 3 & 4 Pool
+      "Beinarbeit Technik", // umbenannt (Technik/Taktik)
+      "10er Gefechte",
+      "Athletik Kraft-Stabilität", // umbenannt (Athletik kurz)
+      "Fechten mit Aufgabenstellung auf 5 Treffer",
       "Partnerübung",
+
+      // neu
+      "Beinarbeit kurz&intensiv",
+      "Beinarbeit Taktik",
     ],
+
+    // ROT
     Ampel.rot: [
       "Aufwärmung",
-      "Aktivierung + Technik",
-      "Locker Technik",
+
+      // Slot 2 Pool
       "Mobilität",
-      "einfache Partnerübung",
+      "Dehnung/Stabilität",
       "Koordination",
       "Reaktion",
+
+      // Slot 3 & 4 Pool
+      "Aktivierung", // umbenannt (Aktivierung + Technik)
+      "Techniktraining mit Waffe", // umbenannt (Locker Technik)
+      "einfache Beinarbeit", // umbenannt (einfache Partnerübung)
       "Partnerübung",
+
+      // neu
+      "Stabilitätstraining",
+      "Ausgleichstraining",
+      "Spiel",
     ],
   };
 
