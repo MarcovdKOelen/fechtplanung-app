@@ -1,3 +1,5 @@
+// lib/ui/week_plan_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,6 +26,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     return DateTime(y, 10, 1);
   }
 
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
   Color _weekBackground(Ampel a, bool trainingFree) {
     if (trainingFree) return Colors.grey.withOpacity(0.15);
     switch (a) {
@@ -35,8 +39,6 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
         return Colors.red.withOpacity(0.08);
     }
   }
-
-  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   bool _isCurrentWeek(WeekPlan w, DateTime now) {
     final start = _dateOnly(w.weekStart);
@@ -72,7 +74,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
 
     await ref.set(
       {
-        "seasonStart": DateTime(picked.year, picked.month, picked.day).toIso8601String(),
+        "seasonStart":
+            DateTime(picked.year, picked.month, picked.day).toIso8601String(),
         "updatedAt": DateTime.now().toIso8601String(),
       },
       SetOptions(merge: true),
@@ -86,173 +89,166 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     DateTime? startDate;
     DateTime? endDate;
     bool multiDay = false;
+    int type = 0; // 0 = gelb, 1 = rot
 
-    // 0=regulär(gelb), 1=wichtig(rot)
-    int type = 0;
+    String fmt(DateTime? d) =>
+        d == null ? "—" : d.toIso8601String().substring(0, 10);
 
-    Future<void> pickStart() async {
-      final now = DateTime.now();
+    Future<void> pickDate(BuildContext ctx, bool isStart) async {
       final picked = await showDatePicker(
-        context: context,
-        initialDate: startDate ?? now,
-        firstDate: DateTime(2020, 1, 1),
-        lastDate: DateTime(2035, 12, 31),
+        context: ctx,
+        initialDate: isStart
+            ? (startDate ?? DateTime.now())
+            : (endDate ?? startDate ?? DateTime.now()),
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2035),
       );
       if (picked == null) return;
-      startDate = DateTime(picked.year, picked.month, picked.day);
-      if (!multiDay) endDate = startDate;
+
+      if (isStart) {
+        startDate = DateTime(picked.year, picked.month, picked.day);
+        if (!multiDay) endDate = startDate;
+      } else {
+        endDate = DateTime(picked.year, picked.month, picked.day);
+      }
     }
 
-    Future<void> pickEnd() async {
-      if (startDate == null) return;
-      final picked = await showDatePicker(
-        context: context,
-        initialDate: endDate ?? startDate!,
-        firstDate: startDate!,
-        lastDate: DateTime(2035, 12, 31),
-      );
-      if (picked == null) return;
-      endDate = DateTime(picked.year, picked.month, picked.day);
-    }
-
-    String fmt(DateTime? d) => d == null ? "—" : d.toIso8601String().substring(0, 10);
-
-    final ok = await showDialog<bool>(
+    final ok = await showModalBottomSheet<bool>(
       context: context,
-      barrierDismissible: false,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setS) {
-            return AlertDialog(
-              title: const Text("Turnier hinzufügen"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: "Turniername",
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: locationCtrl,
-                      decoration: const InputDecoration(
-                        labelText: "Ort",
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        const Expanded(child: Text("Datum (Start)")),
-                        Text(fmt(startDate)),
-                        IconButton(
-                          icon: const Icon(Icons.date_range_outlined),
-                          onPressed: () async {
-                            await pickStart();
-                            setS(() {});
-                          },
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text("Mehrtägig"),
-                            value: multiDay,
-                            onChanged: (v) {
-                              multiDay = v;
-                              if (!multiDay) {
-                                endDate = startDate;
-                              } else {
-                                endDate ??= startDate;
-                              }
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setS) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Turnier hinzufügen",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: "Turniername"),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: locationCtrl,
+                    decoration: const InputDecoration(labelText: "Ort"),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Datum (Start)"),
+                    subtitle: Text(fmt(startDate)),
+                    trailing: const Icon(Icons.date_range),
+                    onTap: () async {
+                      await pickDate(ctx, true);
+                      setS(() {});
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Mehrtägig"),
+                    value: multiDay,
+                    onChanged: (v) {
+                      multiDay = v;
+                      if (!multiDay) endDate = startDate;
+                      setS(() {});
+                    },
+                  ),
+                  if (multiDay)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Datum (Ende)"),
+                      subtitle: Text(fmt(endDate)),
+                      trailing: const Icon(Icons.event),
+                      onTap: startDate == null
+                          ? null
+                          : () async {
+                              await pickDate(ctx, false);
                               setS(() {});
                             },
-                          ),
-                        ),
-                      ],
                     ),
-                    if (multiDay)
-                      Row(
-                        children: [
-                          const Expanded(child: Text("Datum (Ende)")),
-                          Text(fmt(endDate)),
-                          IconButton(
-                            icon: const Icon(Icons.event_outlined),
-                            onPressed: startDate == null
-                                ? null
-                                : () async {
-                                    await pickEnd();
-                                    setS(() {});
-                                  },
-                          ),
-                        ],
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    value: type,
+                    decoration: const InputDecoration(labelText: "Turnier-Typ"),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 0,
+                        child: Text("Reguläres Turnier (Ampel Gelb)"),
                       ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<int>(
-                      value: type,
-                      decoration: const InputDecoration(labelText: "Turnier-Typ"),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 0,
-                          child: Text("Reguläres Turnier (Ampel Gelb)"),
+                      DropdownMenuItem(
+                        value: 1,
+                        child: Text("Wichtiges Turnier / Saisonhöhepunkt (Ampel Rot)"),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      type = v ?? 0;
+                      setS(() {});
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text("Abbrechen"),
                         ),
-                        DropdownMenuItem(
-                          value: 1,
-                          child: Text("Wichtiges Turnier / Saisonhöhepunkt (Ampel Rot)"),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (nameCtrl.text.trim().isEmpty ||
+                                locationCtrl.text.trim().isEmpty ||
+                                startDate == null) {
+                              return;
+                            }
+                            Navigator.pop(ctx, true);
+                          },
+                          child: const Text("Speichern"),
                         ),
-                      ],
-                      onChanged: (v) {
-                        if (v == null) return;
-                        type = v;
-                        setS(() {});
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text("Abbrechen"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final name = nameCtrl.text.trim();
-                    final loc = locationCtrl.text.trim();
-                    if (name.isEmpty || loc.isEmpty || startDate == null) return;
-                    if (multiDay && endDate == null) return;
-                    Navigator.pop(ctx, true);
-                  },
-                  child: const Text("Speichern"),
-                ),
-              ],
-            );
-          },
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         );
       },
     );
 
-    if (ok != true) return;
+    if (ok != true) {
+      nameCtrl.dispose();
+      locationCtrl.dispose();
+      return;
+    }
 
     final tournamentsRef = FirebaseFirestore.instance
         .collection("users")
         .doc(widget.uid)
         .collection("tournaments");
 
-    final s = DateTime(startDate!.year, startDate!.month, startDate!.day);
-    final e = DateTime((endDate ?? startDate!)!.year, (endDate ?? startDate!)!.month, (endDate ?? startDate!)!.day);
-
     await tournamentsRef.add({
       "name": nameCtrl.text.trim(),
       "location": locationCtrl.text.trim(),
-      "startDate": s.toIso8601String(),
-      "endDate": e.toIso8601String(),
-      "isMain": type == 1, // wichtig => rot
+      "startDate": startDate!.toIso8601String(),
+      "endDate": (endDate ?? startDate!).toIso8601String(),
+      "isMain": type == 1,
       "ageClasses": [_age.name],
       "createdAt": DateTime.now().toIso8601String(),
     });
@@ -277,10 +273,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                     children: [
                       const Text(
                         "Archiv (letzte 12 Monate)",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style:
+                            TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                       const Spacer(),
-                      Text("${pastWeeks.length} Wochen", style: const TextStyle(fontSize: 12)),
+                      Text("${pastWeeks.length} Wochen",
+                          style: const TextStyle(fontSize: 12)),
                       const SizedBox(width: 8),
                       IconButton(
                         icon: const Icon(Icons.close),
@@ -292,13 +290,15 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                 const Divider(height: 1),
                 Expanded(
                   child: pastWeeks.isEmpty
-                      ? const Center(child: Text("Keine Wochen im Archiv (letzte 12 Monate)."))
+                      ? const Center(
+                          child: Text("Keine Wochen im Archiv (letzte 12 Monate)."))
                       : ListView.separated(
                           itemCount: pastWeeks.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, i) {
                             final w = pastWeeks[i];
-                            final weekId = w.weekStart.toIso8601String().substring(0, 10);
+                            final weekId =
+                                w.weekStart.toIso8601String().substring(0, 10);
 
                             final weekDocStream = FirebaseFirestore.instance
                                 .collection("users")
@@ -307,21 +307,24 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                 .doc(weekId)
                                 .snapshots();
 
-                            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            return StreamBuilder<
+                                DocumentSnapshot<Map<String, dynamic>>>(
                               stream: weekDocStream,
                               builder: (context, snap) {
-                                final trainingFree = snap.data?.data()?["trainingFree"] == true;
+                                final trainingFree =
+                                    snap.data?.data()?["trainingFree"] == true;
 
                                 return Container(
                                   color: _weekBackground(w.ampel, trainingFree),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
                                   child: ListTile(
                                     title: Text("KW ${w.isoWeek} • $weekId"),
                                     subtitle: Text(
                                       trainingFree
                                           ? "Trainingsfrei"
                                           : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
-                                            "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                                              "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                     ),
                                     trailing: trainingFree
                                         ? const Icon(Icons.hotel_outlined)
@@ -331,7 +334,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                                          builder: (_) => WeekDetailScreen(
+                                              uid: widget.uid, week: w),
                                         ),
                                       );
                                     },
@@ -378,12 +382,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
           stream: tournamentsRef.snapshots(),
           builder: (context, tSnap) {
             if (tSnap.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()));
             }
 
             final tournaments = (tSnap.data?.docs ?? []).map((d) {
               final m = d.data();
-              // Für Anzeige: Name + Ort, ohne PlanEngine zu stören
               final name = (m["name"] ?? "").toString();
               final loc = (m["location"] ?? "").toString();
               if (loc.isNotEmpty) m["name"] = "$name ($loc)";
@@ -468,7 +472,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                             children: [
                               Text(
                                 "Saisonstart: ${seasonStart.toIso8601String().substring(0, 10)}",
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                               const SizedBox(width: 6),
                               const Icon(Icons.edit_calendar_outlined, size: 18),
@@ -484,10 +489,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                         ? const Center(child: Text("Keine Wochen verfügbar."))
                         : ListView.separated(
                             itemCount: visible.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, i) {
                               final w = visible[i];
-                              final weekId = w.weekStart.toIso8601String().substring(0, 10);
+                              final weekId =
+                                  w.weekStart.toIso8601String().substring(0, 10);
 
                               final weekDocStream = FirebaseFirestore.instance
                                   .collection("users")
@@ -496,21 +503,24 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                   .doc(weekId)
                                   .snapshots();
 
-                              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                              return StreamBuilder<
+                                  DocumentSnapshot<Map<String, dynamic>>>(
                                 stream: weekDocStream,
                                 builder: (context, snap) {
-                                  final trainingFree = snap.data?.data()?["trainingFree"] == true;
+                                  final trainingFree =
+                                      snap.data?.data()?["trainingFree"] == true;
 
                                   return Container(
                                     color: _weekBackground(w.ampel, trainingFree),
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 2),
                                     child: ListTile(
                                       title: Text("KW ${w.isoWeek} • $weekId"),
                                       subtitle: Text(
                                         trainingFree
                                             ? "Trainingsfrei"
                                             : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
-                                              "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
+                                                "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                       ),
                                       trailing: trainingFree
                                           ? const Icon(Icons.hotel_outlined)
@@ -519,7 +529,8 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => WeekDetailScreen(uid: widget.uid, week: w),
+                                            builder: (_) => WeekDetailScreen(
+                                                uid: widget.uid, week: w),
                                           ),
                                         );
                                       },
