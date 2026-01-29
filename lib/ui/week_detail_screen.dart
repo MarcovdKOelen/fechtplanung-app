@@ -1,16 +1,13 @@
-// lib/ui/week_detail_screen.dart
-// Datei komplett ersetzen
-//
-// HINWEIS (Dependencies in pubspec.yaml hinzufügen):
+
 // dependencies:
-//   intl: ^0.18.1
 //   pdf: ^3.10.8
 //   printing: ^5.12.0
+//
+// Danach: flutter pub get
 
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -28,8 +25,11 @@ class WeekDetailScreen extends StatelessWidget {
     required this.week,
   });
 
-  // DE: TT.MM.JJJJ
-  String _d(DateTime d) => DateFormat('dd.MM.yyyy', 'de_DE').format(d);
+  // DE Datum: TT.MM.JJJJ (ohne intl)
+  String _d(DateTime d) {
+    String two(int n) => n < 10 ? "0$n" : "$n";
+    return "${two(d.day)}.${two(d.month)}.${d.year}";
+  }
 
   String _weekdayLabel(int i) {
     const days = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
@@ -43,7 +43,8 @@ class WeekDetailScreen extends StatelessWidget {
     return t.startsWith("mobilität");
   }
 
-  bool _isStretchStab(String s) => s.trim().toLowerCase() == "dehnung/stabilität";
+  bool _isStretchStab(String s) =>
+      s.trim().toLowerCase() == "dehnung/stabilität";
 
   bool _isCoordination(String s) => s.trim().toLowerCase() == "koordination";
   bool _isReaction(String s) => s.trim().toLowerCase() == "reaktion";
@@ -74,8 +75,8 @@ class WeekDetailScreen extends StatelessWidget {
 
   // Slot 3 & 4: alles außer Aufwärmung + Mobilität + Dehnung
   List<String> _restOptions(List<String> pool) {
-    final opts = pool.where((e) => !_isExcludedFromRestPool(e)).toSet().toList()
-      ..sort();
+    final opts =
+        pool.where((e) => !_isExcludedFromRestPool(e)).toSet().toList()..sort();
     return opts;
   }
 
@@ -168,7 +169,8 @@ class WeekDetailScreen extends StatelessWidget {
                 children: [
                   Text(
                     "Auswahl: ${_weekdayLabel(dayIndex)} • Slot ${slotIndex + 1}",
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   const Divider(height: 1),
@@ -208,7 +210,6 @@ class WeekDetailScreen extends StatelessWidget {
   }
 
   Future<void> _downloadWeekPdf({
-    required BuildContext context,
     required bool trainingFree,
     required Set<int> trainingDays,
     required Map<String, dynamic> dayOverrides,
@@ -220,8 +221,11 @@ class WeekDetailScreen extends StatelessWidget {
     final title = "Trainingswoche KW ${week.isoWeek}";
     final dateRange = "${_d(start)} – ${_d(end)}";
 
-    // Tagesdaten aufbauen
-    final days = List.generate(7, (i) {
+    final doc = pw.Document();
+
+    // Build Tagesblöcke
+    final dayBlocks = <pw.Widget>[];
+    for (int i = 0; i < 7; i++) {
       final date = week.weekStart.add(Duration(days: i));
       final isTrainingDay = trainingDays.contains(i) && !trainingFree;
 
@@ -235,26 +239,55 @@ class WeekDetailScreen extends StatelessWidget {
           pool: pool,
         );
       }
-      return {
-        "i": i,
-        "label": _weekdayLabel(i),
-        "date": _d(date),
-        "isTrainingDay": isTrainingDay,
-        "recs": recs,
-      };
-    });
 
-    final pdf = pw.Document();
+      dayBlocks.add(
+        pw.Container(
+          margin: const pw.EdgeInsets.only(bottom: 8),
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: PdfColors.grey300, width: 1),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                "${_weekdayLabel(i)} • ${_d(date)}",
+                style: pw.TextStyle(
+                    fontSize: 12, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 6),
+              if (!isTrainingDay)
+                pw.Text("Kein Trainingstag",
+                    style: const pw.TextStyle(fontSize: 11))
+              else
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: recs
+                      .map((r) => pw.Padding(
+                            padding: const pw.EdgeInsets.only(bottom: 2),
+                            child: pw.Text("• $r",
+                                style: const pw.TextStyle(fontSize: 11)),
+                          ))
+                      .toList(),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
 
-    pdf.addPage(
+    doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(28, 28, 28, 28),
-        build: (ctx) => [
-          pw.Text(title, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+        build: (_) => [
+          pw.Text(title,
+              style:
+                  pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 4),
           pw.Text(dateRange, style: const pw.TextStyle(fontSize: 11)),
-          pw.SizedBox(height: 10),
+          pw.SizedBox(height: 12),
           if (trainingFree)
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
@@ -262,60 +295,31 @@ class WeekDetailScreen extends StatelessWidget {
                 border: pw.Border.all(color: PdfColors.grey600, width: 1),
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
               ),
-              child: pw.Text("Diese Woche ist trainingsfrei.", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-            ),
-          if (!trainingFree) pw.Text("Trainingstage & Einheiten:", style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-          if (!trainingFree) pw.SizedBox(height: 6),
-
-          if (!trainingFree)
-            ...days.map((d) {
-              final isT = d["isTrainingDay"] as bool;
-              final label = "${d["label"]} • ${d["date"]}";
-              final recs = (d["recs"] as List<String>);
-
-              return pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 8),
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey300, width: 1),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(label, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                    pw.SizedBox(height: 6),
-                    if (!isT)
-                      pw.Text("Kein Trainingstag", style: const pw.TextStyle(fontSize: 11))
-                    else
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: recs
-                            .map((r) => pw.Padding(
-                                  padding: const pw.EdgeInsets.only(bottom: 2),
-                                  child: pw.Text("• $r", style: const pw.TextStyle(fontSize: 11)),
-                                ))
-                            .toList(),
-                      ),
-                  ],
-                ),
-              );
-            }).toList(),
+              child: pw.Text(
+                "Diese Woche ist trainingsfrei.",
+                style: pw.TextStyle(
+                    fontSize: 12, fontWeight: pw.FontWeight.bold),
+              ),
+            )
+          else ...[
+            pw.Text("Trainingstage & Einheiten:",
+                style: pw.TextStyle(
+                    fontSize: 12, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 8),
+            ...dayBlocks,
+          ],
         ],
       ),
     );
 
-    final bytes = await pdf.save();
-
+    final bytes = await doc.save();
     final fileName = "KW_${week.isoWeek}_${weekDocId.replaceAll('-', '')}.pdf";
 
-    // "Download" / Teilen (Android zeigt Speichern/Drive/Downloads je nach Apps)
     await Printing.sharePdf(bytes: bytes, filename: fileName);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Firestore DocId bleibt ISO (stabil), Anzeige ist deutsch formatiert
     final weekDocId = week.weekStart.toIso8601String().substring(0, 10);
 
     final weekRef = FirebaseFirestore.instance
@@ -378,7 +382,6 @@ class WeekDetailScreen extends StatelessWidget {
                 tooltip: "PDF herunterladen",
                 icon: const Icon(Icons.picture_as_pdf_outlined),
                 onPressed: () => _downloadWeekPdf(
-                  context: context,
                   trainingFree: trainingFree,
                   trainingDays: trainingDays,
                   dayOverrides: dayOverrides,
@@ -443,7 +446,8 @@ class WeekDetailScreen extends StatelessWidget {
                   child: Column(
                     children: List.generate(7, (dayIndex) {
                       final isDay = trainingDays.contains(dayIndex);
-                      final dateStr = _d(week.weekStart.add(Duration(days: dayIndex)));
+                      final dateStr =
+                          _d(week.weekStart.add(Duration(days: dayIndex)));
 
                       final base = _baseFourRecsForDay(dayIndex, pool);
                       final recs = _applyOverrideIfAny(
@@ -462,7 +466,8 @@ class WeekDetailScreen extends StatelessWidget {
                               child: Center(
                                 child: Text(
                                   _weekdayLabel(dayIndex),
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
                                 ),
                               ),
                             ),
@@ -470,7 +475,8 @@ class WeekDetailScreen extends StatelessWidget {
                             subtitle: !isDay
                                 ? const Text("Kein Trainingstag")
                                 : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       for (int s = 0; s < 4; s++)
                                         InkWell(
@@ -484,7 +490,8 @@ class WeekDetailScreen extends StatelessWidget {
                                             pool: pool,
                                           ),
                                           child: Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 2),
                                             child: Text(
                                               "• ${recs[s]}",
                                               style: TextStyle(
