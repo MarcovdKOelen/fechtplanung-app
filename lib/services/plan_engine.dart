@@ -23,6 +23,7 @@ class PlanEngine {
   }
 
   // === Trainingseinheiten je Ampel ===
+  // Neu: "Koordination", "Reaktion" (für Slot 2) + "Partnerübung" (für Slot 3/4) in allen 3 Ampeln
   static const Map<Ampel, List<String>> defaultRecs = {
     Ampel.gruen: [
       "Aufwärmung",
@@ -33,6 +34,9 @@ class PlanEngine {
       "Fechten mit Aufgabenstellung",
       "Mobilitätstraining",
       "Dehnung/Stabilität",
+      "Koordination",
+      "Reaktion",
+      "Partnerübung",
     ],
     Ampel.gelb: [
       "Aufwärmung",
@@ -42,6 +46,9 @@ class PlanEngine {
       "Mobilität",
       "Dehnung/Stabilität",
       "Fechten mit Aufgabenstellung auf 5 Treffer",
+      "Koordination",
+      "Reaktion",
+      "Partnerübung",
     ],
     Ampel.rot: [
       "Aufwärmung",
@@ -49,6 +56,9 @@ class PlanEngine {
       "Locker Technik",
       "Mobilität",
       "einfache Partnerübung",
+      "Koordination",
+      "Reaktion",
+      "Partnerübung",
     ],
   };
 
@@ -82,7 +92,8 @@ class PlanEngine {
 
     for (int i = 0; i < numberOfWeeks; i++) {
       final ws = startMon.add(Duration(days: i * 7));
-      final we = ws.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+      final we =
+          ws.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
 
       final relevant = tournaments.where((t) {
         final ages = (t["ageClasses"] as List? ?? const [])
