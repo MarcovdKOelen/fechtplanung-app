@@ -1,5 +1,3 @@
-// lib/ui/week_detail_screen.dart
-
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -32,6 +30,11 @@ class WeekDetailScreen extends StatelessWidget {
 
   bool _isStretchStab(String s) => s.trim().toLowerCase() == "dehnung/stabilität";
 
+  bool _isCoordination(String s) => s.trim().toLowerCase() == "koordination";
+  bool _isReaction(String s) => s.trim().toLowerCase() == "reaktion";
+
+  bool _isSlot2Special(String s) => _isMobility(s) || _isStretchStab(s) || _isCoordination(s) || _isReaction(s);
+
   int _stableSeedForDay(DateTime weekStart, int dayIndex) {
     final base = "${_d(weekStart)}|$dayIndex|$uid";
     int hash = 0;
@@ -41,43 +44,58 @@ class WeekDetailScreen extends StatelessWidget {
     return hash;
   }
 
+  // Slot 2 Optionen: Mobilität* / Dehnung/Stabilität / Koordination / Reaktion
+  List<String> _slot2Options() {
+    final pool = week.recommendations;
+    final opts = <String>[];
+    opts.addAll(pool.where(_isMobility));
+    opts.addAll(pool.where(_isStretchStab));
+    opts.addAll(pool.where(_isCoordination));
+    opts.addAll(pool.where(_isReaction));
+    final dedup = opts.toSet().toList()..sort();
+    return dedup;
+  }
+
+  // Slots 3 & 4: frei, aber NICHT Warmup und NICHT Slot2Special
+  List<String> _restOptions() {
+    final pool = week.recommendations;
+    final opts = pool.where((e) {
+      if (_isWarmup(e)) return false;
+      if (_isSlot2Special(e)) return false;
+      return true;
+    }).toSet().toList()
+      ..sort();
+    return opts;
+  }
+
+  // Basis-Empfehlungen je Trainingstag (4 Slots):
+  // Slot1: Aufwärmung
+  // Slot2: zufällig 1 aus 4er-Set (Mobilität/Dehnung/Koordination/Reaktion) – sofern vorhanden
+  // Slot3+Slot4: zufällig aus Rest (exkl. Warmup+Slot2Special)
   List<String> _baseFourRecsForDay(int dayIndex) {
     final rng = Random(_stableSeedForDay(week.weekStart, dayIndex));
-    final pool = week.recommendations;
 
     const warmup = "Aufwärmung";
 
-    final mobility = pool.where(_isMobility).toList();
-    final stretch = pool.where(_isStretchStab).toList();
+    final slot2 = _slot2Options();
+    final rest = _restOptions().toList();
 
-    String? mobOrStretch;
-    if (mobility.isNotEmpty && stretch.isNotEmpty) {
-      mobOrStretch = rng.nextBool()
-          ? mobility[rng.nextInt(mobility.length)]
-          : stretch[rng.nextInt(stretch.length)];
-    } else if (mobility.isNotEmpty) {
-      mobOrStretch = mobility[rng.nextInt(mobility.length)];
-    } else if (stretch.isNotEmpty) {
-      mobOrStretch = stretch[rng.nextInt(stretch.length)];
-    }
-
-    final rest = pool.where((e) {
-      if (_isWarmup(e)) return false;
-      if (_isMobility(e)) return false;
-      if (_isStretchStab(e)) return false;
-      return true;
-    }).toList();
-
+    // shuffle rest stabil
     rest.shuffle(rng);
 
     final out = <String>[warmup];
-    if (mobOrStretch != null) out.add(mobOrStretch);
+
+    if (slot2.isNotEmpty) {
+      out.add(slot2[rng.nextInt(slot2.length)]); // genau 1 aus den 4 (bzw. was vorhanden ist)
+    } else {
+      out.add("Training");
+    }
 
     int i = 0;
     while (out.length < 4) {
       if (i < rest.length) {
-        if (!out.contains(rest[i])) out.add(rest[i]);
-        i++;
+        final c = rest[i++];
+        if (!out.contains(c)) out.add(c);
       } else {
         out.add("Training");
       }
@@ -87,27 +105,9 @@ class WeekDetailScreen extends StatelessWidget {
   }
 
   List<String> _allowedOptionsForSlot(int slotIndex) {
-    final pool = week.recommendations;
-
     if (slotIndex == 0) return const ["Aufwärmung"];
-
-    if (slotIndex == 1) {
-      final opts = <String>[];
-      opts.addAll(pool.where(_isMobility));
-      opts.addAll(pool.where(_isStretchStab));
-      final dedup = opts.toSet().toList()..sort();
-      return dedup;
-    }
-
-    final opts = pool.where((e) {
-      if (_isWarmup(e)) return false;
-      if (_isMobility(e)) return false;
-      if (_isStretchStab(e)) return false;
-      return true;
-    }).toSet().toList()
-      ..sort();
-
-    return opts;
+    if (slotIndex == 1) return _slot2Options(); // Mobilität/Dehnung/Koordination/Reaktion
+    return _restOptions(); // Slot 3+4
   }
 
   List<String> _applyOverrideIfAny({
@@ -229,7 +229,6 @@ class WeekDetailScreen extends StatelessWidget {
 
         Future<void> _setTrainingFree(bool v) async {
           if (v) {
-            // trainingsfrei AN: Trainingstage + Overrides leeren
             await weekRef.set(
               {
                 "trainingFree": true,
@@ -239,7 +238,6 @@ class WeekDetailScreen extends StatelessWidget {
               SetOptions(merge: true),
             );
           } else {
-            // trainingsfrei AUS: nur Flag setzen (Trainingstage bleiben wie sie sind)
             await weekRef.set(
               {"trainingFree": false},
               SetOptions(merge: true),
@@ -251,7 +249,7 @@ class WeekDetailScreen extends StatelessWidget {
           final list = next.toList()..sort();
           await weekRef.set(
             {
-              "trainingFree": false, // sobald Tage gesetzt werden, ist nicht trainingsfrei
+              "trainingFree": false,
               "trainingDays": list,
             },
             SetOptions(merge: true),
@@ -376,30 +374,6 @@ class WeekDetailScreen extends StatelessWidget {
                         ],
                       );
                     }),
-                  ),
-                ),
-
-              const SizedBox(height: 16),
-
-              const Text(
-                "Turniere",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              if (week.tournamentNames.isEmpty)
-                const Card(
-                  child: ListTile(
-                    leading: Icon(Icons.emoji_events_outlined),
-                    title: Text("Keine Turniere in dieser Woche."),
-                  ),
-                )
-              else
-                ...week.tournamentNames.map(
-                  (t) => Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.emoji_events_outlined),
-                      title: Text(t),
-                    ),
                   ),
                 ),
             ],
