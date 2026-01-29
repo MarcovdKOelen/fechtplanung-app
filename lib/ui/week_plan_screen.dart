@@ -79,6 +79,188 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     );
   }
 
+  Future<void> _addTournamentDialog() async {
+    final nameCtrl = TextEditingController();
+    final locationCtrl = TextEditingController();
+
+    DateTime? startDate;
+    DateTime? endDate;
+    bool multiDay = false;
+
+    // 0=regulär(gelb), 1=wichtig(rot)
+    int type = 0;
+
+    Future<void> pickStart() async {
+      final now = DateTime.now();
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: startDate ?? now,
+        firstDate: DateTime(2020, 1, 1),
+        lastDate: DateTime(2035, 12, 31),
+      );
+      if (picked == null) return;
+      startDate = DateTime(picked.year, picked.month, picked.day);
+      if (!multiDay) endDate = startDate;
+    }
+
+    Future<void> pickEnd() async {
+      if (startDate == null) return;
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: endDate ?? startDate!,
+        firstDate: startDate!,
+        lastDate: DateTime(2035, 12, 31),
+      );
+      if (picked == null) return;
+      endDate = DateTime(picked.year, picked.month, picked.day);
+    }
+
+    String fmt(DateTime? d) => d == null ? "—" : d.toIso8601String().substring(0, 10);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setS) {
+            return AlertDialog(
+              title: const Text("Turnier hinzufügen"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "Turniername",
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: locationCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "Ort",
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        const Expanded(child: Text("Datum (Start)")),
+                        Text(fmt(startDate)),
+                        IconButton(
+                          icon: const Icon(Icons.date_range_outlined),
+                          onPressed: () async {
+                            await pickStart();
+                            setS(() {});
+                          },
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text("Mehrtägig"),
+                            value: multiDay,
+                            onChanged: (v) {
+                              multiDay = v;
+                              if (!multiDay) {
+                                endDate = startDate;
+                              } else {
+                                endDate ??= startDate;
+                              }
+                              setS(() {});
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (multiDay)
+                      Row(
+                        children: [
+                          const Expanded(child: Text("Datum (Ende)")),
+                          Text(fmt(endDate)),
+                          IconButton(
+                            icon: const Icon(Icons.event_outlined),
+                            onPressed: startDate == null
+                                ? null
+                                : () async {
+                                    await pickEnd();
+                                    setS(() {});
+                                  },
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<int>(
+                      value: type,
+                      decoration: const InputDecoration(labelText: "Turnier-Typ"),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text("Reguläres Turnier (Ampel Gelb)"),
+                        ),
+                        DropdownMenuItem(
+                          value: 1,
+                          child: Text("Wichtiges Turnier / Saisonhöhepunkt (Ampel Rot)"),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        type = v;
+                        setS(() {});
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text("Abbrechen"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = nameCtrl.text.trim();
+                    final loc = locationCtrl.text.trim();
+                    if (name.isEmpty || loc.isEmpty || startDate == null) return;
+                    if (multiDay && endDate == null) return;
+                    Navigator.pop(ctx, true);
+                  },
+                  child: const Text("Speichern"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    final tournamentsRef = FirebaseFirestore.instance
+        .collection("users")
+        .doc(widget.uid)
+        .collection("tournaments");
+
+    final s = DateTime(startDate!.year, startDate!.month, startDate!.day);
+    final e = DateTime((endDate ?? startDate!)!.year, (endDate ?? startDate!)!.month, (endDate ?? startDate!)!.day);
+
+    await tournamentsRef.add({
+      "name": nameCtrl.text.trim(),
+      "location": locationCtrl.text.trim(),
+      "startDate": s.toIso8601String(),
+      "endDate": e.toIso8601String(),
+      "isMain": type == 1, // wichtig => rot
+      "ageClasses": [_age.name],
+      "createdAt": DateTime.now().toIso8601String(),
+    });
+
+    nameCtrl.dispose();
+    locationCtrl.dispose();
+  }
+
   void _openArchive(List<WeekPlan> pastWeeks) {
     showModalBottomSheet(
       context: context,
@@ -138,11 +320,12 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                     subtitle: Text(
                                       trainingFree
                                           ? "Trainingsfrei"
-                                          : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                            "Empfehlung: ${w.recommendations.join(' • ')}"
+                                          : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
                                             "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                     ),
-                                    trailing: trainingFree ? const Icon(Icons.hotel_outlined) : Text(ampelLabel(w.ampel)),
+                                    trailing: trainingFree
+                                        ? const Icon(Icons.hotel_outlined)
+                                        : Text(ampelLabel(w.ampel)),
                                     onTap: () {
                                       Navigator.pop(context);
                                       Navigator.push(
@@ -198,7 +381,14 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
               return const Scaffold(body: Center(child: CircularProgressIndicator()));
             }
 
-            final tournaments = (tSnap.data?.docs ?? []).map((d) => d.data()).toList();
+            final tournaments = (tSnap.data?.docs ?? []).map((d) {
+              final m = d.data();
+              // Für Anzeige: Name + Ort, ohne PlanEngine zu stören
+              final name = (m["name"] ?? "").toString();
+              final loc = (m["location"] ?? "").toString();
+              if (loc.isNotEmpty) m["name"] = "$name ($loc)";
+              return m;
+            }).toList();
 
             final weeks = PlanEngine.buildWeeks(
               ageClass: _age,
@@ -236,6 +426,10 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
               appBar: AppBar(
                 title: const Text("Wochenplan"),
                 actions: [
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: _addTournamentDialog,
+                  ),
                   IconButton(
                     icon: const Icon(Icons.archive_outlined),
                     onPressed: () => _openArchive(past),
@@ -315,8 +509,7 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
                                       subtitle: Text(
                                         trainingFree
                                             ? "Trainingsfrei"
-                                            : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten\n"
-                                              "Empfehlung: ${w.recommendations.join(' • ')}"
+                                            : "${ampelLabel(w.ampel)} • ${w.recommendedSessions} Einheiten"
                                               "${w.tournamentNames.isNotEmpty ? "\nTurnier: ${w.tournamentNames.join(', ')}" : ""}",
                                       ),
                                       trailing: trainingFree
@@ -346,4 +539,3 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     );
   }
 }
-
