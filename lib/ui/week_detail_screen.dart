@@ -1,3 +1,5 @@
+// lib/ui/week_detail_screen.dart
+
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -28,12 +30,14 @@ class WeekDetailScreen extends StatelessWidget {
     return t.startsWith("mobilität");
   }
 
-  bool _isStretchStab(String s) => s.trim().toLowerCase() == "dehnung/stabilität";
+  bool _isStretchStab(String s) =>
+      s.trim().toLowerCase() == "dehnung/stabilität";
 
   bool _isCoordination(String s) => s.trim().toLowerCase() == "koordination";
   bool _isReaction(String s) => s.trim().toLowerCase() == "reaktion";
 
-  bool _isSlot2Special(String s) => _isMobility(s) || _isStretchStab(s) || _isCoordination(s) || _isReaction(s);
+  // WICHTIG: Slot 3/4 dürfen Koordination/Reaktion enthalten -> daher hier NUR Mobilität/Dehnung ausschließen
+  bool _isExcludedFromRestPool(String s) => _isWarmup(s) || _isMobility(s) || _isStretchStab(s);
 
   int _stableSeedForDay(DateTime weekStart, int dayIndex) {
     final base = "${_d(weekStart)}|$dayIndex|$uid";
@@ -56,22 +60,18 @@ class WeekDetailScreen extends StatelessWidget {
     return dedup;
   }
 
-  // Slots 3 & 4: frei, aber NICHT Warmup und NICHT Slot2Special
+  // Slot 3 & 4: alles außer Aufwärmung + Mobilität + Dehnung
   List<String> _restOptions() {
     final pool = week.recommendations;
-    final opts = pool.where((e) {
-      if (_isWarmup(e)) return false;
-      if (_isSlot2Special(e)) return false;
-      return true;
-    }).toSet().toList()
+    final opts = pool.where((e) => !_isExcludedFromRestPool(e)).toSet().toList()
       ..sort();
     return opts;
   }
 
   // Basis-Empfehlungen je Trainingstag (4 Slots):
   // Slot1: Aufwärmung
-  // Slot2: zufällig 1 aus 4er-Set (Mobilität/Dehnung/Koordination/Reaktion) – sofern vorhanden
-  // Slot3+Slot4: zufällig aus Rest (exkl. Warmup+Slot2Special)
+  // Slot2: zufällig 1 aus 4er-Set (Mobilität/Dehnung/Koordination/Reaktion)
+  // Slot3+Slot4: zufällig aus Rest (ohne Aufwärmung/Mobilität/Dehnung), ohne Duplikat zum Slot2
   List<String> _baseFourRecsForDay(int dayIndex) {
     final rng = Random(_stableSeedForDay(week.weekStart, dayIndex));
 
@@ -80,21 +80,21 @@ class WeekDetailScreen extends StatelessWidget {
     final slot2 = _slot2Options();
     final rest = _restOptions().toList();
 
-    // shuffle rest stabil
     rest.shuffle(rng);
 
     final out = <String>[warmup];
 
+    String slot2Pick = "Training";
     if (slot2.isNotEmpty) {
-      out.add(slot2[rng.nextInt(slot2.length)]); // genau 1 aus den 4 (bzw. was vorhanden ist)
-    } else {
-      out.add("Training");
+      slot2Pick = slot2[rng.nextInt(slot2.length)];
     }
+    out.add(slot2Pick);
 
     int i = 0;
     while (out.length < 4) {
       if (i < rest.length) {
         final c = rest[i++];
+        if (c == slot2Pick) continue; // kein doppelter Slot2 in Slot3/4
         if (!out.contains(c)) out.add(c);
       } else {
         out.add("Training");
@@ -106,8 +106,8 @@ class WeekDetailScreen extends StatelessWidget {
 
   List<String> _allowedOptionsForSlot(int slotIndex) {
     if (slotIndex == 0) return const ["Aufwärmung"];
-    if (slotIndex == 1) return _slot2Options(); // Mobilität/Dehnung/Koordination/Reaktion
-    return _restOptions(); // Slot 3+4
+    if (slotIndex == 1) return _slot2Options();
+    return _restOptions();
   }
 
   List<String> _applyOverrideIfAny({
@@ -159,7 +159,8 @@ class WeekDetailScreen extends StatelessWidget {
                 children: [
                   Text(
                     "Auswahl: ${_weekdayLabel(dayIndex)} • Slot ${slotIndex + 1}",
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
                   const Divider(height: 1),
@@ -267,7 +268,6 @@ class WeekDetailScreen extends StatelessWidget {
                 onChanged: (v) async => _setTrainingFree(v),
               ),
               const Divider(),
-
               const Text(
                 "Trainingstage",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -289,15 +289,12 @@ class WeekDetailScreen extends StatelessWidget {
                   );
                 }),
               ),
-
               const SizedBox(height: 16),
-
               const Text(
                 "Empfohlene Einheiten pro Tag (je 4)",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-
               if (trainingFree)
                 const Card(
                   child: ListTile(
@@ -317,7 +314,8 @@ class WeekDetailScreen extends StatelessWidget {
                   child: Column(
                     children: List.generate(7, (dayIndex) {
                       final isDay = selected.contains(dayIndex);
-                      final dateStr = _d(week.weekStart.add(Duration(days: dayIndex)));
+                      final dateStr =
+                          _d(week.weekStart.add(Duration(days: dayIndex)));
 
                       final base = _baseFourRecsForDay(dayIndex);
                       final recs = _applyOverrideIfAny(
@@ -335,7 +333,8 @@ class WeekDetailScreen extends StatelessWidget {
                               child: Center(
                                 child: Text(
                                   _weekdayLabel(dayIndex),
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
                                 ),
                               ),
                             ),
@@ -343,7 +342,8 @@ class WeekDetailScreen extends StatelessWidget {
                             subtitle: !isDay
                                 ? const Text("Kein Trainingstag")
                                 : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       for (int s = 0; s < 4; s++)
                                         InkWell(
@@ -356,7 +356,8 @@ class WeekDetailScreen extends StatelessWidget {
                                             dayOverrides: dayOverrides,
                                           ),
                                           child: Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 2),
                                             child: Text(
                                               "• ${recs[s]}",
                                               style: TextStyle(
